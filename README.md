@@ -1,6 +1,6 @@
 # waveshare_modbus_commander
 
-CLI commander for generic Modbus TCP devices.
+A CLI tool for commanding the Waveshare Dual Ethernet Ports 8-ch Relay Module (C) via Modbus RTU Protocol.
 
 ## Prerequisites
 
@@ -40,3 +40,10 @@ cmake --build build -j4
 ```bash
 ./build/bin/waveshare_modbus_commander --help
 ```
+
+## Waveshare Module Configuration
+
+Visit the configuration website of your Waveshare module, e.g.http://192.168.178.69/ip_en.html and change the settings accordingly:
+
+<img width="1320" height="1061" alt="image" src="https://github.com/user-attachments/assets/13b5a996-e5a3-4011-854e-92911b2115a4" />
+
