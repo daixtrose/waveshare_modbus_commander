@@ -1,4 +1,4 @@
-#include "caparoc/modbus_connection.hpp"
+#include "libmodbus_cpp/modbus_connection.hpp"
 #include "waveshare_modbus_commander/cli_parser.hpp"
 #include "waveshare_modbus_commander/create_modbus_connection.hpp"
 
@@ -31,7 +31,7 @@ namespace
         return false;
     }
 
-    void execute_write_coil(caparoc::ModbusConnection &conn, const waveshare::CoilWriteArgs &args)
+    void execute_write_coil(libmodbus_cpp::ModbusConnection &conn, const waveshare::CoilWriteArgs &args)
     {
         try
         {
