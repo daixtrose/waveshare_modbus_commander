@@ -20,7 +20,7 @@ if(NOT TARGET modbus_cpp)
     FetchContent_Declare(
         libmodbus_cpp_proj
         GIT_REPOSITORY https://github.com/daixtrose/libmodbus-cpp.git
-        GIT_TAG v1.2.0
+        GIT_TAG v1.3.0
         GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(libmodbus_cpp_proj)
