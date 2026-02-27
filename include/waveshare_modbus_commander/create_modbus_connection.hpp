@@ -2,10 +2,7 @@
 #define WAVESHARE_CREATE_MODBUS_CONNECTION_HPP
 
 #include <string>
-
-namespace libmodbus_cpp {
-class ModbusConnection;
-}
+#include "libmodbus_cpp/modbus_connection.hpp"
 
 namespace waveshare {
 
