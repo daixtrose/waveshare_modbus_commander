@@ -16,6 +16,7 @@ include(FetchContent)
 option(WAVESHARE_ENABLE_CPACK "Enable CPack packaging support" ${PROJECT_IS_TOP_LEVEL})
 
 if(NOT TARGET modbus_cpp)
+    set(LIBMODBUS_CPP_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(
         libmodbus_cpp_proj
         GIT_REPOSITORY https://github.com/daixtrose/libmodbus-cpp.git
