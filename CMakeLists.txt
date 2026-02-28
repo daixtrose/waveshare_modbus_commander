@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25...4.2)
 
 project(waveshare_modbus_commander
-    VERSION 0.3.0
+    VERSION 0.4.0
     DESCRIPTION "CLI commander for generic Modbus TCP devices"
     LANGUAGES CXX
 )
@@ -20,7 +20,7 @@ if(NOT TARGET modbus_cpp)
     FetchContent_Declare(
         libmodbus_cpp_proj
         GIT_REPOSITORY https://github.com/daixtrose/libmodbus-cpp.git
-        GIT_TAG v1.3.0
+        GIT_TAG v1.4.0
         GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(libmodbus_cpp_proj)
