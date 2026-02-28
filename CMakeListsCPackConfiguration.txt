@@ -24,13 +24,15 @@ install(TARGETS waveshare_modbus_commander
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-# Ship the libmodbus shared library built from source via ExternalProject
-install(DIRECTORY "${CMAKE_BINARY_DIR}/_deps/libmodbus-install/lib/"
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    FILES_MATCHING
-    PATTERN "libmodbus.so*"
-    PATTERN "pkgconfig" EXCLUDE
-)
+# Ship the libmodbus shared library (Linux only; on Windows, libmodbus is linked statically)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    install(DIRECTORY "${CMAKE_BINARY_DIR}/_deps/libmodbus-install/lib/"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        FILES_MATCHING
+        PATTERN "libmodbus.so*"
+        PATTERN "pkgconfig" EXCLUDE
+    )
+endif()
 
 if(WAVESHARE_ENABLE_CPACK)
     set(CPACK_PACKAGE_VENDOR "Markus Werle")
@@ -85,6 +87,8 @@ if(WAVESHARE_ENABLE_CPACK)
             "${CMAKE_CURRENT_BINARY_DIR}/packaging/postinst"
             "${CMAKE_CURRENT_BINARY_DIR}/packaging/prerm"
         )
+    elseif(WIN32)
+        set(CPACK_GENERATOR ZIP)
     else()
         set(CPACK_GENERATOR TGZ)
     endif()
