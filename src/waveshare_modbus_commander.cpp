@@ -1,9 +1,9 @@
 #include "libmodbus_cpp/modbus_connection.hpp"
 #include "waveshare_modbus_commander/cli_parser.hpp"
 #include "waveshare_modbus_commander/create_modbus_connection.hpp"
+#include "waveshare_modbus_commander/portable_print.hpp"
 
 #include <format>
-#include <print>
 #include <stdexcept>
 #include <cstdlib>
 #include <vector>
@@ -39,22 +39,22 @@ namespace
             bool state = false;
             if (!try_parse_coil_state(args.state, state))
             {
-                std::println("Invalid coil state '{}'. Use one of: on|off|true|false|1|0", args.state);
+                portable::println("Invalid coil state '{}'. Use one of: on|off|true|false|1|0", args.state);
                 return;
             }
 
             if (conn.write_coil(static_cast<uint16_t>(addr), state))
             {
-                std::println("Coil 0x{:04X} = {} (SUCCESS)", addr, state ? "ON" : "OFF");
+                portable::println("Coil 0x{:04X} = {} (SUCCESS)", addr, state ? "ON" : "OFF");
             }
             else
             {
-                std::println("Coil 0x{:04X} = {} (FAILED): {}", addr, state ? "ON" : "OFF", conn.get_last_error());
+                portable::println("Coil 0x{:04X} = {} (FAILED): {}", addr, state ? "ON" : "OFF", conn.get_last_error());
             }
         }
         catch (const std::exception &e)
         {
-            std::println("Error: {}", e.what());
+            portable::println("Error: {}", e.what());
         }
     }
 }
@@ -67,15 +67,15 @@ int main(int argc, char *argv[])
 
         if (options.debug)
         {
-            std::println("========================");
-            std::println("Waveshare Modbus Commander");
-            std::println("========================");
-            std::println("Connecting to {}:{}", options.ip_address, options.port);
-            std::println("");
+            portable::println("========================");
+            portable::println("Waveshare Modbus Commander");
+            portable::println("========================");
+            portable::println("Connecting to {}:{}", options.ip_address, options.port);
+            portable::println("");
 
-            std::println("Command Line Options:");
-            std::println("{}", waveshare::dump_command_line_options(options));
-            std::println("");
+            portable::println("Command Line Options:");
+            portable::println("{}", waveshare::dump_command_line_options(options));
+            portable::println("");
         }
 
         // Create and connect to device
@@ -83,8 +83,8 @@ int main(int argc, char *argv[])
 
         if (options.debug)
         {
-            std::println("Connected successfully!");
-            std::println("");
+            portable::println("Connected successfully!");
+            portable::println("");
         }
 
         // Process all requested actions
@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
             switch (action)
             {
             case waveshare::CommandLineAction::READ_COIL:
-                std::println("=== Read Coil ===");
+                portable::println("=== Read Coil ===");
                 for (const auto &args : options.read_coil_args)
                 {
                     try
@@ -102,22 +102,22 @@ int main(int argc, char *argv[])
                         bool value;
                         if (conn.read_coil(static_cast<uint16_t>(addr), value))
                         {
-                            std::println("Coil 0x{:04X}: {} ({})", addr, value ? "ON" : "OFF", value);
+                            portable::println("Coil 0x{:04X}: {} ({})", addr, value ? "ON" : "OFF", value);
                         }
                         else
                         {
-                            std::println("Failed to read coil 0x{:04X}: {}", addr, conn.get_last_error());
+                            portable::println("Failed to read coil 0x{:04X}: {}", addr, conn.get_last_error());
                         }
                     }
                     catch (const std::exception &e)
                     {
-                        std::println("Error: {}", e.what());
+                        portable::println("Error: {}", e.what());
                     }
                 }
                 break;
 
             case waveshare::CommandLineAction::READ_COILS:
-                std::println("=== Read Coils ===");
+                portable::println("=== Read Coils ===");
                 for (const auto &args : options.read_coils_args)
                 {
                     try
@@ -128,27 +128,27 @@ int main(int argc, char *argv[])
                         std::vector<uint8_t> values(count);
                         if (conn.read_coils(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
                         {
-                            std::println("Read {} coils starting at 0x{:04X}:", count, addr);
+                            portable::println("Read {} coils starting at 0x{:04X}:", count, addr);
                             for (int i = 0; i < count; ++i)
                             {
                                 bool bit_value = (values[i / 8] & (1 << (i % 8))) != 0;
-                                std::println("  Coil 0x{:04X} ({}): {} ({})", addr + i, addr + i, bit_value ? "ON" : "OFF", bit_value);
+                                portable::println("  Coil 0x{:04X} ({}): {} ({})", addr + i, addr + i, bit_value ? "ON" : "OFF", bit_value);
                             }
                         }
                         else
                         {
-                            std::println("Failed to read coils 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn.get_last_error());
+                            portable::println("Failed to read coils 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn.get_last_error());
                         }
                     }
                     catch (const std::exception &e)
                     {
-                        std::println("Error: {}", e.what());
+                        portable::println("Error: {}", e.what());
                     }
                 }
                 break;
 
             case waveshare::CommandLineAction::WRITE_COIL:
-                std::println("=== Write Coil ===");
+                portable::println("=== Write Coil ===");
                 for (const auto &args : options.write_coil_args)
                 {
                     execute_write_coil(conn, args);
@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
                 break;
 
             case waveshare::CommandLineAction::WRITE_COILS:
-                std::println("=== Write Coil Pairs ===");
+                portable::println("=== Write Coil Pairs ===");
                 for (const auto &args : options.write_coils_args)
                 {
                     execute_write_coil(conn, args);
@@ -164,7 +164,7 @@ int main(int argc, char *argv[])
                 break;
 
             case waveshare::CommandLineAction::READ_REGISTER:
-                std::println("=== Read Register ===");
+                portable::println("=== Read Register ===");
                 for (const auto &args : options.read_register_args)
                 {
                     try
@@ -173,22 +173,22 @@ int main(int argc, char *argv[])
                         uint16_t value;
                         if (conn.read_register(static_cast<uint16_t>(addr), value))
                         {
-                            std::println("Register 0x{:04X}: {} (0x{:04X})", addr, value, value);
+                            portable::println("Register 0x{:04X}: {} (0x{:04X})", addr, value, value);
                         }
                         else
                         {
-                            std::println("Failed to read register 0x{:04X}: {}", addr, conn.get_last_error());
+                            portable::println("Failed to read register 0x{:04X}: {}", addr, conn.get_last_error());
                         }
                     }
                     catch (const std::exception &e)
                     {
-                        std::println("Error: {}", e.what());
+                        portable::println("Error: {}", e.what());
                     }
                 }
                 break;
 
             case waveshare::CommandLineAction::READ_REGISTERS:
-                std::println("=== Read Registers ===");
+                portable::println("=== Read Registers ===");
                 for (const auto &args : options.read_registers_args)
                 {
                     try
@@ -199,26 +199,26 @@ int main(int argc, char *argv[])
                         std::vector<uint16_t> values(count);
                         if (conn.read_registers(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
                         {
-                            std::println("Read {} registers starting at 0x{:04X}:", count, addr);
+                            portable::println("Read {} registers starting at 0x{:04X}:", count, addr);
                             for (int i = 0; i < count; ++i)
                             {
-                                std::println("  Register 0x{:04X}: {} (0x{:04X})", addr + i, values[i], values[i]);
+                                portable::println("  Register 0x{:04X}: {} (0x{:04X})", addr + i, values[i], values[i]);
                             }
                         }
                         else
                         {
-                            std::println("Failed to read registers 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn.get_last_error());
+                            portable::println("Failed to read registers 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn.get_last_error());
                         }
                     }
                     catch (const std::exception &e)
                     {
-                        std::println("Error: {}", e.what());
+                        portable::println("Error: {}", e.what());
                     }
                 }
                 break;
 
             case waveshare::CommandLineAction::WRITE_REGISTER:
-                std::println("=== Write Register ===");
+                portable::println("=== Write Register ===");
                 for (const auto &args : options.write_register_args)
                 {
                     try
@@ -228,22 +228,22 @@ int main(int argc, char *argv[])
                         
                         if (conn.write_register(static_cast<uint16_t>(addr), static_cast<uint16_t>(value)))
                         {
-                            std::println("Register 0x{:04X} = {} (0x{:04X}) (SUCCESS)", addr, value, value);
+                            portable::println("Register 0x{:04X} = {} (0x{:04X}) (SUCCESS)", addr, value, value);
                         }
                         else
                         {
-                            std::println("Register 0x{:04X} = {} (FAILED): {}", addr, value, conn.get_last_error());
+                            portable::println("Register 0x{:04X} = {} (FAILED): {}", addr, value, conn.get_last_error());
                         }
                     }
                     catch (const std::exception &e)
                     {
-                        std::println("Error: {}", e.what());
+                        portable::println("Error: {}", e.what());
                     }
                 }
                 break;
 
             case waveshare::CommandLineAction::WRITE_REGISTERS:
-                std::println("=== Write Registers ===");
+                portable::println("=== Write Registers ===");
                 for (const auto &args : options.write_registers_args)
                 {
                     try
@@ -259,26 +259,26 @@ int main(int argc, char *argv[])
                         
                         if (conn.write_registers(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
                         {
-                            std::println("Successfully wrote {} registers starting at 0x{:04X}:", count, addr);
+                            portable::println("Successfully wrote {} registers starting at 0x{:04X}:", count, addr);
                             for (std::size_t i = 0; i < count; ++i)
                             {
-                                std::println("  Register 0x{:04X}: {} (0x{:04X})", addr + i, values[i], values[i]);
+                                portable::println("  Register 0x{:04X}: {} (0x{:04X})", addr + i, values[i], values[i]);
                             }
                         }
                         else
                         {
-                            std::println("Failed to write registers starting at 0x{:04X}: {}", addr, conn.get_last_error());
+                            portable::println("Failed to write registers starting at 0x{:04X}: {}", addr, conn.get_last_error());
                         }
                     }
                     catch (const std::exception &e)
                     {
-                        std::println("Error: {}", e.what());
+                        portable::println("Error: {}", e.what());
                     }
                 }
                 break;
 
             case waveshare::CommandLineAction::NONE:
-                std::println("No action specified. Use --help to see available options.");
+                portable::println("No action specified. Use --help to see available options.");
                 break;
             }
         }
@@ -287,7 +287,7 @@ int main(int argc, char *argv[])
     }
     catch (const std::exception &e)
     {
-        std::println(stderr, "Error: {}", e.what());
+        portable::println(stderr, "Error: {}", e.what());
         return EXIT_FAILURE;
     }
 }
