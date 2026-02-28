@@ -45,9 +45,12 @@ jobs:
         run: cmake --build --preset linux-x86_64-release --parallel
 
       - name: Package
-        run: cpack --preset linux-x86_64-release
+        run: |
+          cpack --preset linux-x86_64-release
+          mkdir -p artifacts
+          find build/linux-x86_64-release -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} artifacts/ \;
 
-      - name: Verify RUNPATH and package content
+      - name: Verify packages
         run: |
           echo "=== .deb contents ==="
           dpkg -c build/linux-x86_64-release/*.deb
@@ -56,6 +59,12 @@ jobs:
           echo "=== RUNPATH (installed binary) ==="
           dpkg -x build/linux-x86_64-release/*.deb /tmp/deb-extract
           readelf -d /tmp/deb-extract/opt/daixtrose/*/bin/* | grep -i -E 'runpath|rpath'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: waveshare-modbus-commander-linux-x86_64
+          path: artifacts/
 
   build-linux-aarch64:
     runs-on: ubuntu-24.04
@@ -89,9 +98,12 @@ jobs:
         run: cmake --build --preset linux-aarch64-release --parallel
 
       - name: Package
-        run: cpack --preset linux-aarch64-release
+        run: |
+          cpack --preset linux-aarch64-release
+          mkdir -p artifacts
+          find build/linux-aarch64-release -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} artifacts/ \;
 
-      - name: Verify package content
+      - name: Verify packages
         run: |
           echo "=== .deb contents ==="
           dpkg -c build/linux-aarch64-release/*.deb
@@ -100,3 +112,9 @@ jobs:
           echo "=== RUNPATH (installed binary) ==="
           dpkg -x build/linux-aarch64-release/*.deb /tmp/deb-extract-aarch64
           aarch64-linux-gnu-readelf -d /tmp/deb-extract-aarch64/opt/daixtrose/*/bin/* | grep -i -E 'runpath|rpath'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: waveshare-modbus-commander-linux-aarch64
+          path: artifacts/
