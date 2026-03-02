@@ -31,6 +31,8 @@ namespace waveshare
                 return "WRITE_REGISTERS";
             case CommandLineAction::ITERATE_RELAY_SWITCHES:
                 return "ITERATE_RELAY_SWITCHES";
+            case CommandLineAction::READ_DIGITAL_INPUTS:
+                return "READ_DIGITAL_INPUTS";
             case CommandLineAction::SCAN_NETWORK:
                 return "SCAN_NETWORK";
             case CommandLineAction::SET_STATIC_IP:
@@ -94,6 +96,10 @@ namespace waveshare
         app.add_flag_callback("--iterate-relais-switches", [&options]()
                               { options.actions.push_back(CommandLineAction::ITERATE_RELAY_SWITCHES); },
                               "Iterate through relay switches: turn each coil on for 1s in sequence, repeat until Ctrl-C");
+
+        app.add_flag_callback("--read-digital-inputs", [&options]()
+                              { options.actions.push_back(CommandLineAction::READ_DIGITAL_INPUTS); },
+                              "Read all 8 digital inputs (DI1-DI8) and display their state");
 
         app.add_flag_callback("--scan-network", [&options]()
                               { options.actions.push_back(CommandLineAction::SCAN_NETWORK); },

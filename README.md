@@ -131,6 +131,34 @@ All relays OFF (safe shutdown)
 
 ---
 
+### Digital Inputs
+
+#### Read all 8 digital inputs
+
+Reads the state of all 8 discrete inputs (DI1–DI8) via Modbus TCP function
+code 02 and displays the result as a two-row table.
+
+```bash
+# Default device address (192.168.1.2:502)
+./build/bin/waveshare_modbus_commander --read-digital-inputs
+
+# Explicit IP / port
+./build/bin/waveshare_modbus_commander -i 192.168.178.69 -p 502 --read-digital-inputs
+
+# By device name (IP resolved via network scan)
+./build/bin/waveshare_modbus_commander --name "Hero 1" --read-digital-inputs
+```
+
+Example output:
+
+```
+=== Read Digital Inputs ===
+DI1	DI2	DI3	DI4	DI5	DI6	DI7	DI8
+OFF	ON	OFF	OFF	OFF	ON	OFF	OFF
+```
+
+---
+
 ### Network Discovery
 
 #### Scan the network for Waveshare devices
