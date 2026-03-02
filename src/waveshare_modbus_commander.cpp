@@ -145,6 +145,51 @@ int main(int argc, char *argv[])
         }
 
         // Process all requested actions
+        //
+        // When chaining multiple VirCom configuration commands (e.g.
+        // --set-name "X" --set-modbus-tcp-port 502), the device reboots
+        // after each one and its name / IP may have changed.  We lock in
+        // the MAC address after the first resolution so that subsequent
+        // actions can always find the device regardless of name/IP changes.
+        std::string resolved_mac;   // set once, reused across actions
+
+        // Helper: scan the network, resolve the target device (using the
+        // locked MAC when available), and return a pointer into `devices`.
+        // `devices` is an out-parameter so the pointer remains valid.
+        auto resolve_device = [&](std::vector<waveshare::DiscoveredDevice>& devices)
+            -> const waveshare::DiscoveredDevice*
+        {
+            std::string target;
+            if (options.ip_explicitly_set) {
+                target = options.ip_address;
+            }
+            devices = waveshare::scan_network(options.scan_timeout_ms,
+                                              options.debug, target);
+            if (devices.empty()) {
+                portable::println(stderr, "No devices found on the network.");
+                return nullptr;
+            }
+
+            // After the first action, always match by MAC
+            std::string mac  = !resolved_mac.empty() ? resolved_mac : options.target_mac;
+            std::string name = !resolved_mac.empty() ? ""           : options.target_name;
+            std::string ip   = !resolved_mac.empty() ? ""
+                             : (options.ip_explicitly_set ? options.ip_address : "");
+
+            std::string error;
+            const auto* dev = waveshare::resolve_target_device(
+                devices, mac, name, ip, error);
+            if (!dev) {
+                portable::println(stderr, "{}", error);
+                return nullptr;
+            }
+            // Lock in the MAC for all subsequent actions
+            if (resolved_mac.empty()) {
+                resolved_mac = dev->mac_address;
+            }
+            return dev;
+        };
+
         for (const auto &action : options.actions)
         {
             switch (action)
@@ -438,22 +483,9 @@ int main(int argc, char *argv[])
             {
                 portable::println("=== Set Static IP ===");
 
-                // Scan to find the target device
-                std::string target;
-                if (options.ip_explicitly_set) {
-                    target = options.ip_address;
-                }
-                auto devices = waveshare::scan_network(options.scan_timeout_ms,
-                                                       options.debug,
-                                                       target);
-                std::string error;
-                auto* target_dev = waveshare::resolve_target_device(
-                    devices, options.target_mac, options.target_name,
-                    options.ip_explicitly_set ? options.ip_address : "", error);
-                if (!target_dev) {
-                    portable::println(stderr, "{}", error);
-                    return EXIT_FAILURE;
-                }
+                std::vector<waveshare::DiscoveredDevice> devices;
+                auto* target_dev = resolve_device(devices);
+                if (!target_dev) return EXIT_FAILURE;
                 portable::println("Target: {} ({}, {})",
                                   target_dev->device_name, target_dev->mac_address, target_dev->ip_address);
 
@@ -482,22 +514,9 @@ int main(int argc, char *argv[])
             {
                 portable::println("=== Set DHCP Mode ===");
 
-                // Scan to find the target device
-                std::string target;
-                if (options.ip_explicitly_set) {
-                    target = options.ip_address;
-                }
-                auto devices = waveshare::scan_network(options.scan_timeout_ms,
-                                                       options.debug,
-                                                       target);
-                std::string error;
-                auto* target_dev = waveshare::resolve_target_device(
-                    devices, options.target_mac, options.target_name,
-                    options.ip_explicitly_set ? options.ip_address : "", error);
-                if (!target_dev) {
-                    portable::println(stderr, "{}", error);
-                    return EXIT_FAILURE;
-                }
+                std::vector<waveshare::DiscoveredDevice> devices;
+                auto* target_dev = resolve_device(devices);
+                if (!target_dev) return EXIT_FAILURE;
 
                 portable::println("Switching device {} ({}) to DHCP mode ...",
                                   target_dev->mac_address, target_dev->ip_address);
@@ -516,22 +535,9 @@ int main(int argc, char *argv[])
             {
                 portable::println("=== Set Modbus TCP Protocol ===");
 
-                // Scan to find the target device
-                std::string target;
-                if (options.ip_explicitly_set) {
-                    target = options.ip_address;
-                }
-                auto devices = waveshare::scan_network(options.scan_timeout_ms,
-                                                       options.debug,
-                                                       target);
-                std::string error;
-                auto* target_dev = waveshare::resolve_target_device(
-                    devices, options.target_mac, options.target_name,
-                    options.ip_explicitly_set ? options.ip_address : "", error);
-                if (!target_dev) {
-                    portable::println(stderr, "{}", error);
-                    return EXIT_FAILURE;
-                }
+                std::vector<waveshare::DiscoveredDevice> devices;
+                auto* target_dev = resolve_device(devices);
+                if (!target_dev) return EXIT_FAILURE;
 
                 if (waveshare::set_device_modbus_tcp(*target_dev,
                                                       static_cast<uint16_t>(options.modbus_tcp_port),
@@ -554,22 +560,9 @@ int main(int argc, char *argv[])
             case waveshare::CommandLineAction::SET_MODBUS_TCP_PORT: {
                 portable::println("=== Set Modbus TCP Port ===");
 
-                // Scan to find the target device
-                std::string target;
-                if (options.ip_explicitly_set) {
-                    target = options.ip_address;
-                }
-                auto devices = waveshare::scan_network(options.scan_timeout_ms,
-                                                       options.debug,
-                                                       target);
-                std::string error;
-                auto* target_dev = waveshare::resolve_target_device(
-                    devices, options.target_mac, options.target_name,
-                    options.ip_explicitly_set ? options.ip_address : "", error);
-                if (!target_dev) {
-                    portable::println(stderr, "{}", error);
-                    return EXIT_FAILURE;
-                }
+                std::vector<waveshare::DiscoveredDevice> devices;
+                auto* target_dev = resolve_device(devices);
+                if (!target_dev) return EXIT_FAILURE;
 
                 if (waveshare::set_device_port(*target_dev,
                                                static_cast<uint16_t>(options.set_port_value),
@@ -594,22 +587,9 @@ int main(int argc, char *argv[])
                     return EXIT_FAILURE;
                 }
 
-                auto devices = waveshare::scan_network(options.scan_timeout_ms,
-                                                       options.debug,
-                                                       "");
-                if (devices.empty()) {
-                    portable::println(stderr, "No devices found on the network.");
-                    return EXIT_FAILURE;
-                }
-
-                std::string ip_if_explicit = options.ip_explicitly_set ? options.ip_address : "";
-                std::string error;
-                const auto *target_dev = waveshare::resolve_target_device(
-                    devices, options.target_mac, options.target_name, ip_if_explicit, error);
-                if (!target_dev) {
-                    portable::println(stderr, "{}", error);
-                    return EXIT_FAILURE;
-                }
+                std::vector<waveshare::DiscoveredDevice> devices;
+                auto* target_dev = resolve_device(devices);
+                if (!target_dev) return EXIT_FAILURE;
 
                 if (waveshare::set_device_name(*target_dev, options.set_name, options.debug)) {
                     portable::println("Device name set to '{}' on device {}.",

@@ -176,6 +176,17 @@ After sending a configuration change the device reboots. The tool
 automatically waits for the device to reappear on the network (default 30 s,
 configurable with `--wait-timeout`).
 
+Multiple configuration commands can be chained in a single invocation.
+After the first command resolves the target device, its MAC address is
+locked in so that subsequent commands can still find it even if its name
+or IP changed in between:
+
+```bash
+# Rename and change port in one go
+./build/bin/waveshare_modbus_commander --name "ABCDEFGHI" \
+    --set-name "Hero 1" --set-modbus-tcp-port 502
+```
+
 #### Set a static IP address
 
 Assigns a static IP, subnet mask, gateway, and DNS server to the device.
