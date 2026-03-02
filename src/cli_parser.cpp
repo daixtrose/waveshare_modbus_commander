@@ -39,6 +39,8 @@ namespace waveshare
                 return "SET_DHCP";
             case CommandLineAction::SET_MODBUS_TCP:
                 return "SET_MODBUS_TCP";
+            case CommandLineAction::SET_MODBUS_TCP_PORT:
+                return "SET_MODBUS_TCP_PORT";
             case CommandLineAction::SET_NAME:
                 return "SET_NAME";
             }
@@ -122,8 +124,12 @@ namespace waveshare
                               "Set a device to Modbus TCP protocol (TCP Server, use --mac to identify the target)");
 
         app.add_option("--modbus-tcp-port", options.modbus_tcp_port,
-                       "Modbus TCP port for --set-modbus-tcp (default: 502)")
+                       "Modbus TCP port for --set-modbus-tcp / --set-modbus-tcp-port (default: 502)")
             ->default_val(502);
+
+        app.add_flag_callback("--set-modbus-tcp-port", [&options]()
+                              { options.actions.push_back(CommandLineAction::SET_MODBUS_TCP_PORT); },
+                              "Change only the listening port (use --modbus-tcp-port to specify, --mac to identify the target)");
 
         auto set_name_option = app.add_option("--set-name", options.set_name,
                                               "Set the device name (max 9 ASCII characters, use --mac to identify the target)");

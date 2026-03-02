@@ -919,6 +919,28 @@ bool set_device_modbus_tcp(const DiscoveredDevice& device,
     return send_config_packet(packet, device.ip_address, debug);
 }
 
+bool set_device_port(const DiscoveredDevice& device,
+                     uint16_t port,
+                     bool debug)
+{
+    // Start from the device's raw VirCom response as template
+    auto packet = device.raw_response;
+
+    // Change command to SET_CONFIG
+    packet[2] = VIRCOM_CMD_SET_CONFIG;
+
+    // Port (uint16 big-endian) at offset 0x13-0x14
+    packet[0x13] = static_cast<uint8_t>((port >> 8) & 0xFF);
+    packet[0x14] = static_cast<uint8_t>(port & 0xFF);
+
+    if (debug) {
+        portable::println("SET_CONFIG (Port) for device MAC {}:", device.mac_address);
+        portable::println("  Port: {}", port);
+    }
+
+    return send_config_packet(packet, device.ip_address, debug);
+}
+
 bool set_device_name(const DiscoveredDevice& device,
                      const std::string& name,
                      bool debug)
