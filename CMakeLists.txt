@@ -71,4 +71,10 @@ elseif(MSVC)
     )
 endif()
 
+# Statically link MinGW runtime (libstdc++, libgcc, libwinpthread) so the
+# resulting .exe is fully self-contained and runs without MSYS2/MinGW installed.
+if(MINGW)
+    target_link_options(waveshare_modbus_commander PRIVATE -static)
+endif()
+
 include(${CMAKE_CURRENT_LIST_DIR}/CMakeListsCPackConfiguration.txt)
