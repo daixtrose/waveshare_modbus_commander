@@ -51,6 +51,24 @@ std::vector<DiscoveredDevice> scan_network(int timeout_ms, bool debug,
 /// Format a list of discovered devices as a human-readable table.
 std::string format_device_table(const std::vector<DiscoveredDevice>& devices);
 
+/// Resolve a target device from a list of discovered devices.
+/// Matches by MAC address, device name, or IP address (whichever is
+/// non-empty).  When no identifier is given and exactly one device
+/// was found, it is auto-selected.
+///
+/// @param devices       Discovered devices from scan_network().
+/// @param mac           MAC to match (empty = don't match by MAC).
+/// @param name          Device name to match (empty = don't match by name).
+/// @param ip            IP to match (empty = don't match by IP).
+/// @param[out] error    Human-readable error message on failure.
+/// @return Pointer into @p devices on success, nullptr on failure.
+const DiscoveredDevice* resolve_target_device(
+    const std::vector<DiscoveredDevice>& devices,
+    const std::string& mac,
+    const std::string& name,
+    const std::string& ip,
+    std::string& error);
+
 /// Set a device to a static IP configuration via VirCom SET_CONFIG.
 /// The device is identified by its MAC address.
 /// @param device      The device (from scan_network) to configure.
