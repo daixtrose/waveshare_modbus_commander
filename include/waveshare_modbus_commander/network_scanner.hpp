@@ -90,6 +90,16 @@ bool set_device_modbus_tcp(const DiscoveredDevice& device,
                            uint16_t port,
                            bool debug);
 
+/// Change only the device listening port via VirCom SET_CONFIG.
+/// Does not modify the transfer protocol or work mode.
+/// @param device  The device to configure.
+/// @param port    New listening port.
+/// @param debug   Print diagnostic information.
+/// @return true if the config packet was sent successfully.
+bool set_device_port(const DiscoveredDevice& device,
+                     uint16_t port,
+                     bool debug);
+
 /// Set the device name via VirCom SET_CONFIG.
 /// @param device  The device to configure.
 /// @param name    New device name (max 9 ASCII characters).

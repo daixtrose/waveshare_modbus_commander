@@ -26,7 +26,46 @@ Use a fresh build directory, especially when switching compilers:
 rm -rf build
 ```
 
-Build:
+### Using CMake Presets (recommended)
+
+The project ships a `CMakePresets.json` with ready-made configurations.
+List available presets:
+
+```bash
+cmake --list-presets
+```
+
+```
+Available configure presets:
+
+  "linux-x86_64-release" - Linux x86_64 Release
+  "linux-x86_64-debug"   - Linux x86_64 Debug
+  "linux-aarch64-release" - Linux aarch64 Release (cross-compile for RPi 5 / RevPi Connect 5)
+  "windows-x86_64-release" - Windows x86_64 Release (MSYS2 MinGW)
+```
+
+Configure and build with a preset:
+
+```bash
+# Debug build
+cmake --preset linux-x86_64-debug
+cmake --build --preset linux-x86_64-debug
+
+# Release build
+cmake --preset linux-x86_64-release
+cmake --build --preset linux-x86_64-release
+```
+
+The binary is placed in `build/<preset-name>/bin/waveshare_modbus_commander`.
+
+Presets also support packaging (TGZ, DEB, RPM on Linux; ZIP on Windows):
+
+```bash
+cmake --build --preset linux-x86_64-release
+cpack --preset linux-x86_64-release
+```
+
+### Manual CMake invocation
 
 ```bash
 cd waveshare_modbus_commander
@@ -234,6 +273,28 @@ Example output:
 Auto-selected the only device found: 192.168.1.200 (28:80:ca:ec:41:f9)
 Modbus TCP configuration sent to device 28:80:ca:ec:41:f9.
 Protocol: Modbus TCP, Work Mode: TCP Server, Port: 502
+```
+
+#### Change only the listening port
+
+Changes the device's listening port without modifying the transfer protocol
+or work mode. Useful when the device is already configured for Modbus TCP
+and you only want to switch to a non-standard port.
+
+```bash
+# Change port to 9876
+./build/bin/waveshare_modbus_commander --mac 28:80:ca:ea:41:f3 --set-modbus-tcp-port --modbus-tcp-port 9876
+
+# Change port back to standard 502
+./build/bin/waveshare_modbus_commander --mac 28:80:ca:ea:41:f3 --set-modbus-tcp-port --modbus-tcp-port 502
+```
+
+Example output:
+
+```
+=== Set Modbus TCP Port ===
+Auto-selected the only device found: 192.168.178.69 (28:80:ca:ea:41:f3)
+Port changed to 9876 on device 28:80:ca:ea:41:f3.
 ```
 
 ## Waveshare Module Configuration
