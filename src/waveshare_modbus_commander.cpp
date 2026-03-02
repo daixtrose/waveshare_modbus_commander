@@ -96,6 +96,10 @@ int main(int argc, char *argv[])
         bool needs_connection = false;
         for (const auto& action : options.actions) {
             if (action != waveshare::CommandLineAction::SCAN_NETWORK &&
+                action != waveshare::CommandLineAction::SET_STATIC_IP &&
+                action != waveshare::CommandLineAction::SET_DHCP &&
+                action != waveshare::CommandLineAction::SET_MODBUS_TCP &&
+                action != waveshare::CommandLineAction::SET_NAME &&
                 action != waveshare::CommandLineAction::NONE) {
                 needs_connection = true;
                 break;
@@ -401,6 +405,225 @@ int main(int argc, char *argv[])
                                                        options.debug,
                                                        target);
                 portable::println("{}", waveshare::format_device_table(devices));
+                break;
+            }
+
+            case waveshare::CommandLineAction::SET_STATIC_IP:
+            {
+                portable::println("=== Set Static IP ===");
+
+                // Scan to find the target device
+                std::string target;
+                if (options.ip_explicitly_set) {
+                    target = options.ip_address;
+                }
+                auto devices = waveshare::scan_network(options.scan_timeout_ms,
+                                                       options.debug,
+                                                       target);
+                if (devices.empty()) {
+                    portable::println(stderr, "No devices found on the network.");
+                    return EXIT_FAILURE;
+                }
+
+                // Find the target device by MAC or by IP
+                const waveshare::DiscoveredDevice* target_dev = nullptr;
+                if (!options.target_mac.empty()) {
+                    for (const auto& d : devices) {
+                        if (d.mac_address == options.target_mac) {
+                            target_dev = &d;
+                            break;
+                        }
+                    }
+                    if (!target_dev) {
+                        portable::println(stderr, "Device with MAC {} not found.", options.target_mac);
+                        portable::println("Devices found:");
+                        portable::println("{}", waveshare::format_device_table(devices));
+                        return EXIT_FAILURE;
+                    }
+                } else if (devices.size() == 1) {
+                    target_dev = &devices[0];
+                    portable::println("Auto-selected the only device found: {} ({})",
+                                      target_dev->ip_address, target_dev->mac_address);
+                } else {
+                    portable::println(stderr, "Multiple devices found — use --mac to specify the target device.");
+                    portable::println("{}", waveshare::format_device_table(devices));
+                    return EXIT_FAILURE;
+                }
+
+                if (waveshare::set_device_ip(*target_dev,
+                                             options.set_ip_address,
+                                             options.set_subnet_mask,
+                                             options.set_gateway,
+                                             options.set_dns,
+                                             options.debug)) {
+                    portable::println("Static IP configuration sent to device {}.", target_dev->mac_address);
+                    portable::println("New IP: {}, Mask: {}, Gateway: {}, DNS: {}",
+                                      options.set_ip_address, options.set_subnet_mask,
+                                      options.set_gateway, options.set_dns);
+                } else {
+                    portable::println(stderr, "Failed to send configuration.");
+                    return EXIT_FAILURE;
+                }
+                break;
+            }
+
+            case waveshare::CommandLineAction::SET_DHCP:
+            {
+                portable::println("=== Set DHCP Mode ===");
+
+                // Scan to find the target device
+                std::string target;
+                if (options.ip_explicitly_set) {
+                    target = options.ip_address;
+                }
+                auto devices = waveshare::scan_network(options.scan_timeout_ms,
+                                                       options.debug,
+                                                       target);
+                if (devices.empty()) {
+                    portable::println(stderr, "No devices found on the network.");
+                    return EXIT_FAILURE;
+                }
+
+                // Find the target device by MAC or by IP
+                const waveshare::DiscoveredDevice* target_dev = nullptr;
+                if (!options.target_mac.empty()) {
+                    for (const auto& d : devices) {
+                        if (d.mac_address == options.target_mac) {
+                            target_dev = &d;
+                            break;
+                        }
+                    }
+                    if (!target_dev) {
+                        portable::println(stderr, "Device with MAC {} not found.", options.target_mac);
+                        portable::println("Devices found:");
+                        portable::println("{}", waveshare::format_device_table(devices));
+                        return EXIT_FAILURE;
+                    }
+                } else if (devices.size() == 1) {
+                    target_dev = &devices[0];
+                    portable::println("Auto-selected the only device found: {} ({})",
+                                      target_dev->ip_address, target_dev->mac_address);
+                } else {
+                    portable::println(stderr, "Multiple devices found — use --mac to specify the target device.");
+                    portable::println("{}", waveshare::format_device_table(devices));
+                    return EXIT_FAILURE;
+                }
+
+                portable::println("Switching device {} ({}) to DHCP mode ...",
+                                  target_dev->mac_address, target_dev->ip_address);
+
+                auto result = waveshare::set_device_dhcp(*target_dev,
+                                                         options.dhcp_wait_timeout_ms,
+                                                         options.debug);
+                if (!result.empty()) {
+                    portable::println("Device is now at {} (DHCP)", result[0].ip_address);
+                    portable::println("{}", waveshare::format_device_table(result));
+                }
+                break;
+            }
+
+            case waveshare::CommandLineAction::SET_MODBUS_TCP:
+            {
+                portable::println("=== Set Modbus TCP Protocol ===");
+
+                // Scan to find the target device
+                std::string target;
+                if (options.ip_explicitly_set) {
+                    target = options.ip_address;
+                }
+                auto devices = waveshare::scan_network(options.scan_timeout_ms,
+                                                       options.debug,
+                                                       target);
+                if (devices.empty()) {
+                    portable::println(stderr, "No devices found on the network.");
+                    return EXIT_FAILURE;
+                }
+
+                // Find the target device by MAC or by IP
+                const waveshare::DiscoveredDevice* target_dev = nullptr;
+                if (!options.target_mac.empty()) {
+                    for (const auto& d : devices) {
+                        if (d.mac_address == options.target_mac) {
+                            target_dev = &d;
+                            break;
+                        }
+                    }
+                    if (!target_dev) {
+                        portable::println(stderr, "Device with MAC {} not found.", options.target_mac);
+                        portable::println("Devices found:");
+                        portable::println("{}", waveshare::format_device_table(devices));
+                        return EXIT_FAILURE;
+                    }
+                } else if (devices.size() == 1) {
+                    target_dev = &devices[0];
+                    portable::println("Auto-selected the only device found: {} ({})",
+                                      target_dev->ip_address, target_dev->mac_address);
+                } else {
+                    portable::println(stderr, "Multiple devices found — use --mac to specify the target device.");
+                    portable::println("{}", waveshare::format_device_table(devices));
+                    return EXIT_FAILURE;
+                }
+
+                if (waveshare::set_device_modbus_tcp(*target_dev,
+                                                      static_cast<uint16_t>(options.modbus_tcp_port),
+                                                      options.debug)) {
+                    portable::println("Modbus TCP configuration sent to device {}.",
+                                      target_dev->mac_address);
+                    portable::println("Protocol: Modbus TCP, Work Mode: TCP Server, Port: {}",
+                                      options.modbus_tcp_port);
+                } else {
+                    portable::println(stderr, "Failed to send configuration.");
+                    return EXIT_FAILURE;
+                }
+                break;
+            }
+
+            case waveshare::CommandLineAction::SET_NAME: {
+                if (options.set_name.size() > 9) {
+                    portable::println(stderr, "Error: Device name '{}' is too long (max 9 characters, got {}).",
+                                      options.set_name, options.set_name.size());
+                    return EXIT_FAILURE;
+                }
+
+                auto devices = waveshare::scan_network(options.scan_timeout_ms,
+                                                       options.debug,
+                                                       "");
+                if (devices.empty()) {
+                    portable::println(stderr, "No devices found on the network.");
+                    return EXIT_FAILURE;
+                }
+
+                const waveshare::DiscoveredDevice *target_dev = nullptr;
+
+                if (!options.target_mac.empty()) {
+                    for (const auto &dev : devices) {
+                        if (dev.mac_address == options.target_mac) {
+                            target_dev = &dev;
+                            break;
+                        }
+                    }
+                    if (!target_dev) {
+                        portable::println(stderr, "Device with MAC {} not found.", options.target_mac);
+                        portable::println("{}", waveshare::format_device_table(devices));
+                        return EXIT_FAILURE;
+                    }
+                } else if (devices.size() == 1) {
+                    target_dev = &devices[0];
+                    portable::println("Auto-selected the only device found: {} ({})",
+                                      target_dev->ip_address, target_dev->mac_address);
+                } else {
+                    portable::println(stderr, "Multiple devices found — use --mac to specify the target device.");
+                    portable::println("{}", waveshare::format_device_table(devices));
+                    return EXIT_FAILURE;
+                }
+
+                if (waveshare::set_device_name(*target_dev, options.set_name, options.debug)) {
+                    portable::println("Device name set to '{}' on device {}.",
+                                      options.set_name, target_dev->mac_address);
+                } else {
+                    portable::println(stderr, "Failed to send configuration.");
+                    return EXIT_FAILURE;
+                }
                 break;
             }
             }

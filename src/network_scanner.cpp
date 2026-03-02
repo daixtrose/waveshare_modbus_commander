@@ -58,11 +58,11 @@ namespace {
 
 /// VirCom protocol constants
 constexpr uint16_t VIRCOM_PORT = 1092;
-constexpr size_t   VIRCOM_PACKET_SIZE = 170;
 constexpr uint8_t  VIRCOM_MAGIC_0 = 0x5A; // 'Z'
 constexpr uint8_t  VIRCOM_MAGIC_1 = 0x4C; // 'L'
-constexpr uint8_t  VIRCOM_CMD_SEARCH  = 0x00;
-constexpr uint8_t  VIRCOM_CMD_RESPONSE = 0x01;
+constexpr uint8_t  VIRCOM_CMD_SEARCH   = 0x00;
+constexpr uint8_t  VIRCOM_CMD_RESPONSE  = 0x01;
+constexpr uint8_t  VIRCOM_CMD_SET_CONFIG = 0x02;
 
 /// Build a VirCom search request packet (170 bytes).
 /// Only the first 3 bytes are significant: 5A 4C 00
@@ -82,7 +82,6 @@ std::string format_ip(const uint8_t* data)
 }
 
 /// Format 6 bytes as a colon-separated MAC address string.
-[[maybe_unused]]
 std::string format_mac(const uint8_t* data)
 {
     return std::format("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
@@ -111,11 +110,19 @@ bool parse_response(const uint8_t* data, size_t len, DiscoveredDevice& dev)
     dev.subnet_mask = format_ip(&data[7]);
     dev.gateway     = format_ip(&data[11]);
     dev.dns_server  = format_ip(&data[15]);
-    dev.ip_mode     = data[19];
-    dev.baud_rate_index = data[22];
+    dev.baud_rate_index = data[0x16];
+
+    // DHCP flag at offset 0x3B:  0 = Static, 1 = DHCP
+    dev.ip_mode = data[0x3B];
+
+    // MAC address: 6 bytes at offset 0x22
+    dev.mac_address = format_mac(&data[0x22]);
 
     // Module ID: 10 ASCII bytes at offset 0x18
     dev.module_id = extract_string(&data[0x18], 10);
+
+    // Store the full raw response for use as SET_CONFIG template
+    std::memcpy(dev.raw_response.data(), data, VIRCOM_PACKET_SIZE);
 
     // Device name: null-terminated string at offset 0x29
     dev.device_name = extract_string(&data[0x29], 16);
@@ -570,6 +577,7 @@ std::vector<DiscoveredDevice> scan_network(int timeout_ms, bool debug,
                                       sender_ip, dev.ip_address);
                     portable::println("  Device name: {}", dev.device_name);
                     portable::println("  Module ID:   {}", dev.module_id);
+                    portable::println("  MAC:         {}", dev.mac_address);
                     portable::println("  Subnet:      {}", dev.subnet_mask);
                     portable::println("  Gateway:     {}", dev.gateway);
                     portable::println("  DNS:         {}", dev.dns_server);
@@ -596,6 +604,7 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
 
     // Determine column widths
     size_t w_ip   = 15;  // "IP Address"
+    size_t w_mac  = 17;  // "MAC Address"
     size_t w_name = 11;  // "Device Name"
     size_t w_mask = 15;  // "Subnet Mask"
     size_t w_gw   = 15;  // "Gateway"
@@ -604,6 +613,7 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
 
     for (const auto& d : devices) {
         w_ip   = std::max(w_ip,   d.ip_address.size());
+        w_mac  = std::max(w_mac,  d.mac_address.size());
         w_name = std::max(w_name, d.device_name.size());
         w_mask = std::max(w_mask, d.subnet_mask.size());
         w_gw   = std::max(w_gw,   d.gateway.size());
@@ -613,8 +623,9 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
     std::string out;
 
     // Header
-    out += std::format("{:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}\n",
+    out += std::format("{:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}\n",
                        "IP Address", w_ip,
+                       "MAC Address", w_mac,
                        "Device Name", w_name,
                        "Subnet Mask", w_mask,
                        "Gateway", w_gw,
@@ -623,6 +634,7 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
 
     // Separator
     out += std::string(w_ip, '-') + "  " +
+           std::string(w_mac, '-') + "  " +
            std::string(w_name, '-') + "  " +
            std::string(w_mask, '-') + "  " +
            std::string(w_gw, '-') + "  " +
@@ -632,8 +644,9 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
     // Rows
     for (const auto& d : devices) {
         std::string mode = (d.ip_mode == 1) ? "DHCP" : "Static";
-        out += std::format("{:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}\n",
+        out += std::format("{:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}\n",
                            d.ip_address, w_ip,
+                           d.mac_address, w_mac,
                            d.device_name, w_name,
                            d.subnet_mask, w_mask,
                            d.gateway, w_gw,
@@ -644,6 +657,292 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
     out += std::format("\n{} device(s) found.\n", devices.size());
 
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// VirCom SET_CONFIG helpers
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Parse a dotted-decimal IPv4 address and write 4 bytes to @p out.
+/// Returns true on success.
+bool parse_ip_to_bytes(const std::string& ip_str, uint8_t* out)
+{
+    struct in_addr addr{};
+    if (inet_pton(AF_INET, ip_str.c_str(), &addr) != 1) return false;
+    auto n = ntohl(addr.s_addr);
+    out[0] = static_cast<uint8_t>((n >> 24) & 0xFF);
+    out[1] = static_cast<uint8_t>((n >> 16) & 0xFF);
+    out[2] = static_cast<uint8_t>((n >>  8) & 0xFF);
+    out[3] = static_cast<uint8_t>( n        & 0xFF);
+    return true;
+}
+
+/// Send a 170-byte VirCom config packet via UDP broadcast AND unicast
+/// to the device's current IP (twice each, mirroring VirCom behaviour).
+/// The unicast path is essential on WSL2 where broadcasts don't cross
+/// the NAT boundary to the physical LAN.
+/// Returns true if at least one send succeeded.
+bool send_config_packet(const std::array<uint8_t, VIRCOM_PACKET_SIZE>& packet,
+                        const std::string& device_ip,
+                        bool debug)
+{
+#ifdef _WIN32
+    WinsockInit wsa_init;
+    if (!wsa_init.ok) {
+        portable::println(stderr, "Failed to initialize Winsock");
+        return false;
+    }
+#endif
+
+    socket_t sock = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock == INVALID_SOCK) {
+        portable::println(stderr, "Failed to create UDP socket: error {}",
+                          get_last_socket_error());
+        return false;
+    }
+
+    int broadcast_enable = 1;
+    ::setsockopt(sock, SOL_SOCKET, SO_BROADCAST,
+                 reinterpret_cast<const char*>(&broadcast_enable),
+                 sizeof(broadcast_enable));
+
+    // Build the list of destinations: broadcast + unicast to device IP
+    std::vector<sockaddr_in> destinations;
+
+    // 1. Limited broadcast
+    {
+        sockaddr_in dest{};
+        dest.sin_family      = AF_INET;
+        dest.sin_addr.s_addr = INADDR_BROADCAST;
+        dest.sin_port        = htons(VIRCOM_PORT);
+        destinations.push_back(dest);
+    }
+
+    // 2. Per-interface directed broadcasts
+    {
+        auto bcast_addrs = get_interface_broadcast_addresses();
+        for (const auto& baddr : bcast_addrs) {
+            sockaddr_in dest{};
+            dest.sin_family = AF_INET;
+            dest.sin_addr   = baddr;
+            dest.sin_port   = htons(VIRCOM_PORT);
+            destinations.push_back(dest);
+        }
+    }
+
+    // 3. Unicast to the device's current IP (crucial for WSL2)
+    if (!device_ip.empty()) {
+        sockaddr_in dest{};
+        dest.sin_family = AF_INET;
+        dest.sin_port   = htons(VIRCOM_PORT);
+        if (inet_pton(AF_INET, device_ip.c_str(), &dest.sin_addr) == 1) {
+            destinations.push_back(dest);
+        }
+    }
+
+    bool ok = false;
+    // Send twice to each destination (VirCom sends the config packet
+    // twice for reliability)
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        for (const auto& dest : destinations) {
+            char ip_str[INET_ADDRSTRLEN]{};
+            inet_ntop(AF_INET, &dest.sin_addr, ip_str, sizeof(ip_str));
+
+            auto sent = ::sendto(sock,
+                                 reinterpret_cast<const char*>(packet.data()),
+                                 static_cast<int>(packet.size()),
+                                 0,
+                                 reinterpret_cast<const sockaddr*>(&dest),
+                                 sizeof(dest));
+            if (sent > 0) {
+                ok = true;
+                if (debug) {
+                    portable::println("Sent SET_CONFIG packet ({} bytes) -> {}:{} [attempt {}]",
+                                      sent, ip_str, VIRCOM_PORT, attempt + 1);
+                }
+            } else if (debug) {
+                portable::println("Failed to send SET_CONFIG to {}: error {}",
+                                  ip_str, get_last_socket_error());
+            }
+        }
+    }
+
+    close_socket(sock);
+    return ok;
+}
+
+} // anonymous namespace
+
+bool set_device_ip(const DiscoveredDevice& device,
+                   const std::string& new_ip,
+                   const std::string& new_mask,
+                   const std::string& new_gateway,
+                   const std::string& new_dns,
+                   bool debug)
+{
+    // Start from the device's raw VirCom response as template
+    auto packet = device.raw_response;
+
+    // Change command to SET_CONFIG
+    packet[2] = VIRCOM_CMD_SET_CONFIG;
+
+    // Write new network settings
+    if (!parse_ip_to_bytes(new_ip,      &packet[0x03]) ||
+        !parse_ip_to_bytes(new_mask,    &packet[0x07]) ||
+        !parse_ip_to_bytes(new_gateway, &packet[0x0B]) ||
+        !parse_ip_to_bytes(new_dns,     &packet[0x0F])) {
+        portable::println(stderr, "Invalid IP address format");
+        return false;
+    }
+
+    // Set Static mode
+    packet[0x3B] = 0x00;
+
+    if (debug) {
+        portable::println("SET_CONFIG (Static IP) for device MAC {}:", device.mac_address);
+        portable::println("  IP:      {}", new_ip);
+        portable::println("  Mask:    {}", new_mask);
+        portable::println("  Gateway: {}", new_gateway);
+        portable::println("  DNS:     {}", new_dns);
+    }
+
+    return send_config_packet(packet, device.ip_address, debug);
+}
+
+std::vector<DiscoveredDevice> set_device_dhcp(
+    const DiscoveredDevice& device,
+    int wait_timeout_ms,
+    bool debug)
+{
+    // Start from the device's raw VirCom response as template
+    auto packet = device.raw_response;
+
+    // Change command to SET_CONFIG
+    packet[2] = VIRCOM_CMD_SET_CONFIG;
+
+    // Set DHCP mode
+    packet[0x3B] = 0x01;
+
+    if (debug) {
+        portable::println("SET_CONFIG (DHCP) for device MAC {}:", device.mac_address);
+    }
+
+    if (!send_config_packet(packet, device.ip_address, debug)) {
+        portable::println(stderr, "Failed to send SET_CONFIG packet");
+        return {};
+    }
+
+    // Wait for the device to reappear with a new (DHCP-assigned) IP.
+    // The device reboots after configuration, so we scan repeatedly
+    // and match by MAC address.
+    portable::println("Waiting for device {} to reappear with DHCP-assigned IP ...",
+                      device.mac_address);
+
+    auto start = std::chrono::steady_clock::now();
+    constexpr int SCAN_INTERVAL_MS = 3000;
+
+    while (true) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start);
+        if (elapsed.count() >= wait_timeout_ms) break;
+
+        // Brief pause before scanning to let the device reboot
+        #ifdef _WIN32
+            Sleep(SCAN_INTERVAL_MS);
+        #else
+            usleep(static_cast<useconds_t>(SCAN_INTERVAL_MS) * 1000);
+        #endif
+
+        if (debug) {
+            portable::println("Scanning for device {} ({:.0f}s / {:.0f}s) ...",
+                              device.mac_address,
+                              elapsed.count() / 1000.0,
+                              wait_timeout_ms / 1000.0);
+        }
+
+        auto found = scan_network(SCAN_INTERVAL_MS, debug);
+
+        for (const auto& d : found) {
+            if (d.mac_address == device.mac_address) {
+                portable::println("Device {} reappeared at {} ({})",
+                                  d.mac_address, d.ip_address,
+                                  d.ip_mode == 1 ? "DHCP" : "Static");
+                return {d};
+            }
+        }
+    }
+
+    portable::println("Timeout: device {} did not reappear within {} seconds",
+                      device.mac_address, wait_timeout_ms / 1000);
+    return {};
+}
+
+bool set_device_modbus_tcp(const DiscoveredDevice& device,
+                           uint16_t port,
+                           bool debug)
+{
+    // Start from the device's raw VirCom response as template
+    auto packet = device.raw_response;
+
+    // Change command to SET_CONFIG
+    packet[2] = VIRCOM_CMD_SET_CONFIG;
+
+    // Transfer Protocol = Modbus TCP
+    packet[0x3A] = 0x03;
+    packet[0x3F] = 0x01;
+    packet[0x74] = 0x06;
+
+    // Work Mode = TCP Server
+    packet[0x17] = 0x00;
+
+    // Port (uint16 big-endian)
+    packet[0x13] = static_cast<uint8_t>((port >> 8) & 0xFF);
+    packet[0x14] = static_cast<uint8_t>(port & 0xFF);
+
+    if (debug) {
+        portable::println("SET_CONFIG (Modbus TCP) for device MAC {}:", device.mac_address);
+        portable::println("  Transfer Protocol: Modbus TCP");
+        portable::println("  Work Mode:         TCP Server");
+        portable::println("  Port:              {}", port);
+    }
+
+    return send_config_packet(packet, device.ip_address, debug);
+}
+
+bool set_device_name(const DiscoveredDevice& device,
+                     const std::string& name,
+                     bool debug)
+{
+    constexpr size_t MAX_NAME_LEN = 9;
+
+    if (name.empty()) {
+        portable::println(stderr, "Device name must not be empty");
+        return false;
+    }
+    if (name.size() > MAX_NAME_LEN) {
+        portable::println(stderr, "Device name '{}' is too long ({} chars, max {})",
+                          name, name.size(), MAX_NAME_LEN);
+        return false;
+    }
+
+    // Start from the device's raw VirCom response as template
+    auto packet = device.raw_response;
+
+    // Change command to SET_CONFIG
+    packet[2] = VIRCOM_CMD_SET_CONFIG;
+
+    // Write device name at offset 0x29 (9 bytes, null-padded)
+    std::memset(&packet[0x29], 0, MAX_NAME_LEN);
+    std::memcpy(&packet[0x29], name.data(), name.size());
+
+    if (debug) {
+        portable::println("SET_CONFIG (Name) for device MAC {}:", device.mac_address);
+        portable::println("  New name: '{}'", name);
+    }
+
+    return send_config_packet(packet, device.ip_address, debug);
 }
 
 } // namespace waveshare

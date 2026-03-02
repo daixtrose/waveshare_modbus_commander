@@ -18,7 +18,11 @@ enum class CommandLineAction {
     WRITE_REGISTER,
     WRITE_REGISTERS,
     ITERATE_RELAY_SWITCHES,
-    SCAN_NETWORK
+    SCAN_NETWORK,
+    SET_STATIC_IP,
+    SET_DHCP,
+    SET_MODBUS_TCP,
+    SET_NAME
 };
 
 struct CoilReadArgs {
@@ -71,7 +75,16 @@ struct CommandLineOptions {
     std::vector<RegistersWriteArgs> write_registers_args;
     
     int scan_timeout_ms = 3000;
+    int dhcp_wait_timeout_ms = 30000;
     bool ip_explicitly_set = false;
+
+    std::string target_mac;       ///< --mac: target device MAC for set-ip/set-dhcp
+    std::string set_ip_address;   ///< --set-ip: new static IP
+    std::string set_subnet_mask;  ///< --set-ip: new subnet mask
+    std::string set_gateway;      ///< --set-ip: new gateway
+    std::string set_dns;          ///< --set-ip: new DNS server
+    int modbus_tcp_port = 502;     ///< --set-modbus-tcp: Modbus TCP port
+    std::string set_name;          ///< --set-name: new device name (max 9 chars)
 
     bool debug = false;
 }; 
