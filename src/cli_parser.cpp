@@ -33,6 +33,14 @@ namespace waveshare
                 return "ITERATE_RELAY_SWITCHES";
             case CommandLineAction::SCAN_NETWORK:
                 return "SCAN_NETWORK";
+            case CommandLineAction::SET_STATIC_IP:
+                return "SET_STATIC_IP";
+            case CommandLineAction::SET_DHCP:
+                return "SET_DHCP";
+            case CommandLineAction::SET_MODBUS_TCP:
+                return "SET_MODBUS_TCP";
+            case CommandLineAction::SET_NAME:
+                return "SET_NAME";
             }
             return "UNKNOWN";
         }
@@ -92,6 +100,33 @@ namespace waveshare
         app.add_option("--scan-timeout", options.scan_timeout_ms,
                        "Timeout in milliseconds for network scan (default: 3000)")
             ->default_val(3000);
+
+        app.add_option("--mac", options.target_mac,
+                       "Target device MAC address (e.g. 28:80:ca:ea:41:f3) for --set-ip / --set-dhcp");
+
+        std::vector<std::string> set_ip_args;
+        auto set_ip_option = app.add_option("--set-ip", set_ip_args,
+                                            "Set static IP on a device: <ip> <mask> <gateway> <dns>")
+                                 ->expected(4);
+
+        app.add_flag_callback("--set-dhcp", [&options]()
+                              { options.actions.push_back(CommandLineAction::SET_DHCP); },
+                              "Set a device to DHCP mode (use --mac to identify the target device)");
+
+        app.add_option("--dhcp-wait-timeout", options.dhcp_wait_timeout_ms,
+                       "How long to wait (ms) for DHCP IP assignment after --set-dhcp (default: 30000)")
+            ->default_val(30000);
+
+        app.add_flag_callback("--set-modbus-tcp", [&options]()
+                              { options.actions.push_back(CommandLineAction::SET_MODBUS_TCP); },
+                              "Set a device to Modbus TCP protocol (TCP Server, use --mac to identify the target)");
+
+        app.add_option("--modbus-tcp-port", options.modbus_tcp_port,
+                       "Modbus TCP port for --set-modbus-tcp (default: 502)")
+            ->default_val(502);
+
+        auto set_name_option = app.add_option("--set-name", options.set_name,
+                                              "Set the device name (max 9 ASCII characters, use --mac to identify the target)");
 
         try
         {
@@ -194,6 +229,25 @@ namespace waveshare
                 }
                 options.write_registers_args.push_back(args);
             }
+        }
+
+        // Process --set-ip (4 positional args: ip mask gateway dns)
+        if (set_ip_option->count() > 0)
+        {
+            options.actions.push_back(CommandLineAction::SET_STATIC_IP);
+            if (set_ip_args.size() == 4)
+            {
+                options.set_ip_address  = set_ip_args[0];
+                options.set_subnet_mask = set_ip_args[1];
+                options.set_gateway     = set_ip_args[2];
+                options.set_dns         = set_ip_args[3];
+            }
+        }
+
+        // Process --set-name
+        if (set_name_option->count() > 0)
+        {
+            options.actions.push_back(CommandLineAction::SET_NAME);
         }
 
         return options;
