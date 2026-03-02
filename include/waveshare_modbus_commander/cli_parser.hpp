@@ -76,7 +76,7 @@ struct CommandLineOptions {
     std::vector<RegistersWriteArgs> write_registers_args;
     
     int scan_timeout_ms = 3000;
-    int dhcp_wait_timeout_ms = 30000;
+    int wait_timeout_ms = 30000;
     bool ip_explicitly_set = false;
 
     std::string target_mac;       ///< --mac: target device MAC address

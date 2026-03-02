@@ -471,6 +471,10 @@ int main(int argc, char *argv[])
                     portable::println(stderr, "Failed to send configuration.");
                     return EXIT_FAILURE;
                 }
+
+                auto reappeared = waveshare::wait_for_device_reboot(
+                    target_dev->mac_address, options.wait_timeout_ms, options.debug);
+                if (!reappeared) return EXIT_FAILURE;
                 break;
             }
 
@@ -499,7 +503,7 @@ int main(int argc, char *argv[])
                                   target_dev->mac_address, target_dev->ip_address);
 
                 auto result = waveshare::set_device_dhcp(*target_dev,
-                                                         options.dhcp_wait_timeout_ms,
+                                                         options.wait_timeout_ms,
                                                          options.debug);
                 if (!result.empty()) {
                     portable::println("Device is now at {} (DHCP)", result[0].ip_address);
@@ -540,6 +544,10 @@ int main(int argc, char *argv[])
                     portable::println(stderr, "Failed to send configuration.");
                     return EXIT_FAILURE;
                 }
+
+                auto reappeared = waveshare::wait_for_device_reboot(
+                    target_dev->mac_address, options.wait_timeout_ms, options.debug);
+                if (!reappeared) return EXIT_FAILURE;
                 break;
             }
 
@@ -572,6 +580,10 @@ int main(int argc, char *argv[])
                     portable::println(stderr, "Failed to send configuration.");
                     return EXIT_FAILURE;
                 }
+
+                auto reappeared = waveshare::wait_for_device_reboot(
+                    target_dev->mac_address, options.wait_timeout_ms, options.debug);
+                if (!reappeared) return EXIT_FAILURE;
                 break;
             }
 
@@ -606,6 +618,10 @@ int main(int argc, char *argv[])
                     portable::println(stderr, "Failed to send configuration.");
                     return EXIT_FAILURE;
                 }
+
+                auto reappeared = waveshare::wait_for_device_reboot(
+                    target_dev->mac_address, options.wait_timeout_ms, options.debug);
+                if (!reappeared) return EXIT_FAILURE;
                 break;
             }
             }

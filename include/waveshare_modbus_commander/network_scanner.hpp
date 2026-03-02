@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -84,6 +85,19 @@ bool set_device_ip(const DiscoveredDevice& device,
                    const std::string& new_gateway,
                    const std::string& new_dns,
                    bool debug);
+
+/// Wait for a device (identified by MAC) to reappear on the network
+/// after a configuration change that triggers a reboot.
+/// Scans periodically until the device is found or the timeout expires.
+///
+/// @param mac_address     MAC address to look for.
+/// @param wait_timeout_ms How long to wait (milliseconds).
+/// @param debug           Print diagnostic information.
+/// @return The rediscovered device, or std::nullopt on timeout.
+std::optional<DiscoveredDevice> wait_for_device_reboot(
+    const std::string& mac_address,
+    int wait_timeout_ms,
+    bool debug);
 
 /// Set a device to DHCP mode via VirCom SET_CONFIG.
 /// After sending the command, waits for the device to reappear on the

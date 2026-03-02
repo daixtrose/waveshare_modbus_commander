@@ -892,6 +892,53 @@ bool set_device_ip(const DiscoveredDevice& device,
     return send_config_packet(packet, device.ip_address, debug);
 }
 
+std::optional<DiscoveredDevice> wait_for_device_reboot(
+    const std::string& mac_address,
+    int wait_timeout_ms,
+    bool debug)
+{
+    portable::println("Waiting for device {} to reappear (timeout {}s) ...",
+                      mac_address, wait_timeout_ms / 1000);
+
+    auto start = std::chrono::steady_clock::now();
+    constexpr int SCAN_INTERVAL_MS = 3000;
+
+    while (true) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start);
+        if (elapsed.count() >= wait_timeout_ms) break;
+
+        // Brief pause before scanning to let the device reboot
+        #ifdef _WIN32
+            Sleep(SCAN_INTERVAL_MS);
+        #else
+            usleep(static_cast<useconds_t>(SCAN_INTERVAL_MS) * 1000);
+        #endif
+
+        if (debug) {
+            portable::println("Scanning for device {} ({:.0f}s / {:.0f}s) ...",
+                              mac_address,
+                              elapsed.count() / 1000.0,
+                              wait_timeout_ms / 1000.0);
+        }
+
+        auto found = scan_network(SCAN_INTERVAL_MS, debug);
+
+        for (const auto& d : found) {
+            if (d.mac_address == mac_address) {
+                portable::println("Device {} reappeared at {} ({})",
+                                  d.mac_address, d.ip_address,
+                                  d.ip_mode == 1 ? "DHCP" : "Static");
+                return d;
+            }
+        }
+    }
+
+    portable::println(stderr, "Timeout: device {} did not reappear within {}s.",
+                      mac_address, wait_timeout_ms / 1000);
+    return std::nullopt;
+}
+
 std::vector<DiscoveredDevice> set_device_dhcp(
     const DiscoveredDevice& device,
     int wait_timeout_ms,
@@ -915,48 +962,10 @@ std::vector<DiscoveredDevice> set_device_dhcp(
         return {};
     }
 
-    // Wait for the device to reappear with a new (DHCP-assigned) IP.
-    // The device reboots after configuration, so we scan repeatedly
-    // and match by MAC address.
-    portable::println("Waiting for device {} to reappear with DHCP-assigned IP ...",
-                      device.mac_address);
-
-    auto start = std::chrono::steady_clock::now();
-    constexpr int SCAN_INTERVAL_MS = 3000;
-
-    while (true) {
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - start);
-        if (elapsed.count() >= wait_timeout_ms) break;
-
-        // Brief pause before scanning to let the device reboot
-        #ifdef _WIN32
-            Sleep(SCAN_INTERVAL_MS);
-        #else
-            usleep(static_cast<useconds_t>(SCAN_INTERVAL_MS) * 1000);
-        #endif
-
-        if (debug) {
-            portable::println("Scanning for device {} ({:.0f}s / {:.0f}s) ...",
-                              device.mac_address,
-                              elapsed.count() / 1000.0,
-                              wait_timeout_ms / 1000.0);
-        }
-
-        auto found = scan_network(SCAN_INTERVAL_MS, debug);
-
-        for (const auto& d : found) {
-            if (d.mac_address == device.mac_address) {
-                portable::println("Device {} reappeared at {} ({})",
-                                  d.mac_address, d.ip_address,
-                                  d.ip_mode == 1 ? "DHCP" : "Static");
-                return {d};
-            }
-        }
+    auto result = wait_for_device_reboot(device.mac_address, wait_timeout_ms, debug);
+    if (result) {
+        return {*result};
     }
-
-    portable::println("Timeout: device {} did not reappear within {} seconds",
-                      device.mac_address, wait_timeout_ms / 1000);
     return {};
 }
 

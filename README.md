@@ -172,6 +172,10 @@ or IP address (`-i`). When only a single device is found on the network, it
 is auto-selected. When multiple devices exist, one of these identifiers is
 required.
 
+After sending a configuration change the device reboots. The tool
+automatically waits for the device to reappear on the network (default 30 s,
+configurable with `--wait-timeout`).
+
 #### Set a static IP address
 
 Assigns a static IP, subnet mask, gateway, and DNS server to the device.
@@ -196,6 +200,8 @@ Example output:
 Auto-selected the only device found: 192.168.178.69 (28:80:ca:ea:41:f3)
 Static IP configuration sent to device 28:80:ca:ea:41:f3.
 New IP: 192.168.1.200, Mask: 255.255.255.0, Gateway: 192.168.1.1, DNS: 8.8.8.8
+Waiting for device 28:80:ca:ea:41:f3 to reappear (timeout 30s) ...
+Device 28:80:ca:ea:41:f3 reappeared at 192.168.1.200 (Static)
 ```
 
 #### Switch a device to DHCP
@@ -211,7 +217,7 @@ DHCP-assigned IP. The wait timeout is configurable (default 30 s).
 ./build/bin/waveshare_modbus_commander --name "WSDEV0002" --set-dhcp
 
 # Custom wait timeout (10 seconds)
-./build/bin/waveshare_modbus_commander --mac 28:80:ca:ec:41:f9 --set-dhcp --dhcp-wait-timeout 10000
+./build/bin/waveshare_modbus_commander --mac 28:80:ca:ec:41:f9 --set-dhcp --wait-timeout 10000
 ```
 
 Example output:
@@ -219,9 +225,7 @@ Example output:
 ```
 === Set DHCP Mode ===
 Switching device 28:80:ca:ec:41:f9 (192.168.1.200) to DHCP mode ...
-Waiting for device 28:80:ca:ec:41:f9 to reappear with DHCP-assigned IP ...
-Scanning for device 28:80:ca:ec:41:f9 (3s / 30s) ...
-Scanning for device 28:80:ca:ec:41:f9 (8s / 30s) ...
+Waiting for device 28:80:ca:ec:41:f9 to reappear (timeout 30s) ...
 Device 28:80:ca:ec:41:f9 reappeared at 192.168.178.69 (DHCP)
 Device is now at 192.168.178.69 (DHCP)
 IP Address       MAC Address        Device Name  Port  Subnet Mask      Gateway          IP Mode  Module ID
@@ -256,6 +260,8 @@ Example output (success):
 ```
 Auto-selected the only device found: 192.168.178.69 (28:80:ca:ea:41:f3)
 Device name set to 'RELAY01' on device 28:80:ca:ea:41:f3.
+Waiting for device 28:80:ca:ea:41:f3 to reappear (timeout 30s) ...
+Device 28:80:ca:ea:41:f3 reappeared at 192.168.178.69 (DHCP)
 ```
 
 Example output (name too long):
@@ -291,6 +297,8 @@ Example output:
 Auto-selected the only device found: 192.168.1.200 (28:80:ca:ec:41:f9)
 Modbus TCP configuration sent to device 28:80:ca:ec:41:f9.
 Protocol: Modbus TCP, Work Mode: TCP Server, Port: 502
+Waiting for device 28:80:ca:ec:41:f9 to reappear (timeout 30s) ...
+Device 28:80:ca:ec:41:f9 reappeared at 192.168.1.200 (Static)
 ```
 
 #### Change only the listening port
@@ -316,6 +324,8 @@ Example output:
 === Set Modbus TCP Port ===
 Auto-selected the only device found: 192.168.178.69 (28:80:ca:ea:41:f3)
 Port changed to 9876 on device 28:80:ca:ea:41:f3.
+Waiting for device 28:80:ca:ea:41:f3 to reappear (timeout 30s) ...
+Device 28:80:ca:ea:41:f3 reappeared at 192.168.178.69 (DHCP)
 ```
 
 ## Waveshare Module Configuration
