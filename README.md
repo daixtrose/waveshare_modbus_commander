@@ -283,10 +283,10 @@ and you only want to switch to a non-standard port.
 
 ```bash
 # Change port to 9876
-./build/bin/waveshare_modbus_commander --mac 28:80:ca:ea:41:f3 --set-modbus-tcp-port --modbus-tcp-port 9876
+./build/bin/waveshare_modbus_commander --mac 28:80:ca:ea:41:f3 --set-modbus-tcp-port 9876
 
 # Change port back to standard 502
-./build/bin/waveshare_modbus_commander --mac 28:80:ca:ea:41:f3 --set-modbus-tcp-port --modbus-tcp-port 502
+./build/bin/waveshare_modbus_commander --mac 28:80:ca:ea:41:f3 --set-modbus-tcp-port 502
 ```
 
 Example output:

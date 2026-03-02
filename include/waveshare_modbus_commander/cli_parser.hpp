@@ -84,7 +84,8 @@ struct CommandLineOptions {
     std::string set_subnet_mask;  ///< --set-ip: new subnet mask
     std::string set_gateway;      ///< --set-ip: new gateway
     std::string set_dns;          ///< --set-ip: new DNS server
-    int modbus_tcp_port = 502;     ///< --set-modbus-tcp / --set-modbus-tcp-port: port
+    int modbus_tcp_port = 502;     ///< --set-modbus-tcp: Modbus TCP port
+    int set_port_value = 0;        ///< --set-modbus-tcp-port: new listening port
     std::string set_name;          ///< --set-name: new device name (max 9 chars)
 
     bool debug = false;

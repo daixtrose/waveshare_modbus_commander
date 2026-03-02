@@ -621,10 +621,10 @@ int main(int argc, char *argv[])
                 }
 
                 if (waveshare::set_device_port(*target_dev,
-                                               static_cast<uint16_t>(options.modbus_tcp_port),
+                                               static_cast<uint16_t>(options.set_port_value),
                                                options.debug)) {
                     portable::println("Port changed to {} on device {}.",
-                                      options.modbus_tcp_port, target_dev->mac_address);
+                                      options.set_port_value, target_dev->mac_address);
                 } else {
                     portable::println(stderr, "Failed to send configuration.");
                     return EXIT_FAILURE;
