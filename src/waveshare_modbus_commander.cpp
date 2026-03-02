@@ -325,6 +325,27 @@ int main(int argc, char *argv[])
                 });
                 break;
 
+            case waveshare::CommandLineAction::READ_DIGITAL_INPUTS:
+            {
+                portable::println("=== Read Digital Inputs ===");
+                constexpr uint16_t di_count = 8;
+                uint8_t values[di_count]{};
+                if (conn->read_discrete_inputs(0x0000, di_count, values)) {
+                    // Header row
+                    std::string header, states;
+                    for (uint16_t i = 0; i < di_count; ++i) {
+                        if (i > 0) { header += '\t'; states += '\t'; }
+                        header += std::format("DI{}", i + 1);
+                        states += (values[i] ? "ON" : "OFF");
+                    }
+                    portable::println("{}", header);
+                    portable::println("{}", states);
+                } else {
+                    portable::println("Failed to read digital inputs: {}", conn->get_last_error());
+                }
+                break;
+            }
+
             case waveshare::CommandLineAction::ITERATE_RELAY_SWITCHES:
             {
                 portable::println("=== Iterate Relay Switches (Ctrl-C to stop) ===");
