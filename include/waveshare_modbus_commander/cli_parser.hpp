@@ -16,7 +16,8 @@ enum class CommandLineAction {
     READ_REGISTER,
     READ_REGISTERS,
     WRITE_REGISTER,
-    WRITE_REGISTERS
+    WRITE_REGISTERS,
+    ITERATE_RELAY_SWITCHES
 };
 
 struct CoilReadArgs {

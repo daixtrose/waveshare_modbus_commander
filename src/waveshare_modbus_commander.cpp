@@ -3,13 +3,25 @@
 #include "waveshare_modbus_commander/create_modbus_connection.hpp"
 #include "waveshare_modbus_commander/portable_print.hpp"
 
+#include <atomic>
+#include <chrono>
+#include <csignal>
+#include <cstdlib>
 #include <format>
 #include <stdexcept>
-#include <cstdlib>
+#include <thread>
 #include <vector>
 
 namespace
 {
+    // Global flag for Ctrl-C signal handling
+    std::atomic<bool> g_interrupted{false};
+
+    void sigint_handler(int /*signum*/)
+    {
+        g_interrupted.store(true, std::memory_order_relaxed);
+    }
+
     bool try_parse_coil_state(const std::string &state_token, bool &state)
     {
         if (state_token == "on" || state_token == "ON" ||
@@ -276,6 +288,85 @@ int main(int argc, char *argv[])
                     }
                 }
                 break;
+
+            case waveshare::CommandLineAction::ITERATE_RELAY_SWITCHES:
+            {
+                portable::println("=== Iterate Relay Switches (Ctrl-C to stop) ===");
+
+                // Install SIGINT handler
+                g_interrupted.store(false);
+                auto prev_handler = std::signal(SIGINT, sigint_handler);
+
+                // Turn all relays off first (address 0x00FF = all relays)
+                if (!conn.write_coil(0x00FF, false))
+                {
+                    portable::println("FAILED to turn all relays off: {}", conn.get_last_error());
+                    break;
+                }
+                portable::println("All relays OFF");
+
+                constexpr int NUM_COILS = 8;
+                constexpr auto ON_DURATION = std::chrono::seconds(1);
+                constexpr auto PAUSE_BETWEEN_CYCLES = std::chrono::seconds(3);
+
+                while (!g_interrupted.load(std::memory_order_relaxed))
+                {
+                    for (int i = 0; i < NUM_COILS && !g_interrupted.load(std::memory_order_relaxed); ++i)
+                    {
+                        uint16_t addr = static_cast<uint16_t>(i);
+
+                        // Turn coil on
+                        if (!conn.write_coil(addr, true))
+                        {
+                            portable::println("FAILED to turn coil {} ON: {}", i + 1, conn.get_last_error());
+                            continue;
+                        }
+                        portable::println("Coil {} ON", i + 1);
+
+                        // Wait 1 second (check for interrupt every 100ms)
+                        for (int t = 0; t < 10 && !g_interrupted.load(std::memory_order_relaxed); ++t)
+                        {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                        }
+
+                        // Turn coil off
+                        if (!conn.write_coil(addr, false))
+                        {
+                            portable::println("FAILED to turn coil {} OFF: {}", i + 1, conn.get_last_error());
+                        }
+                        else
+                        {
+                            portable::println("Coil {} OFF", i + 1);
+                        }
+                    }
+
+                    if (g_interrupted.load(std::memory_order_relaxed))
+                        break;
+
+                    portable::println("--- Cycle complete, waiting 3 seconds ---");
+
+                    // Wait 3 seconds between cycles (check for interrupt every 100ms)
+                    for (int t = 0; t < 30 && !g_interrupted.load(std::memory_order_relaxed); ++t)
+                    {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    }
+                }
+
+                // Ensure all relays are off on exit
+                portable::println("\nInterrupted — turning all relays OFF ...");
+                if (conn.write_coil(0x00FF, false))
+                {
+                    portable::println("All relays OFF (safe shutdown)");
+                }
+                else
+                {
+                    portable::println("WARNING: failed to turn all relays off: {}", conn.get_last_error());
+                }
+
+                // Restore previous signal handler
+                std::signal(SIGINT, prev_handler);
+                break;
+            }
 
             case waveshare::CommandLineAction::NONE:
                 portable::println("No action specified. Use --help to see available options.");

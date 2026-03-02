@@ -29,6 +29,8 @@ namespace waveshare
                 return "WRITE_REGISTER";
             case CommandLineAction::WRITE_REGISTERS:
                 return "WRITE_REGISTERS";
+            case CommandLineAction::ITERATE_RELAY_SWITCHES:
+                return "ITERATE_RELAY_SWITCHES";
             }
             return "UNKNOWN";
         }
@@ -75,6 +77,10 @@ namespace waveshare
         auto write_registers_option = app.add_option("--write-registers", write_registers_args_raw,
                                  "Write multiple holding registers (address value1 value2 ...)")
                           ->expected(2, -1);
+
+        app.add_flag_callback("--iterate-relais-switches", [&options]()
+                              { options.actions.push_back(CommandLineAction::ITERATE_RELAY_SWITCHES); },
+                              "Iterate through relay switches: turn each coil on for 1s in sequence, repeat until Ctrl-C");
 
         try
         {
