@@ -667,6 +667,79 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
     return out;
 }
 
+const DiscoveredDevice* resolve_target_device(
+    const std::vector<DiscoveredDevice>& devices,
+    const std::string& mac,
+    const std::string& name,
+    const std::string& ip,
+    std::string& error)
+{
+    if (devices.empty()) {
+        error = "No devices found on the network.";
+        return nullptr;
+    }
+
+    // Count how many identifiers were provided
+    int id_count = (!mac.empty() ? 1 : 0) +
+                   (!name.empty() ? 1 : 0) +
+                   (!ip.empty() ? 1 : 0);
+
+    if (id_count > 1) {
+        error = "Please specify only one of --mac, --name, or -i to identify the target device.";
+        return nullptr;
+    }
+
+    // Match by MAC
+    if (!mac.empty()) {
+        for (const auto& d : devices) {
+            if (d.mac_address == mac)
+                return &d;
+        }
+        error = std::format("Device with MAC {} not found.\n{}", mac, format_device_table(devices));
+        return nullptr;
+    }
+
+    // Match by name
+    if (!name.empty()) {
+        const DiscoveredDevice* found = nullptr;
+        int matches = 0;
+        for (const auto& d : devices) {
+            if (d.device_name == name) {
+                found = &d;
+                ++matches;
+            }
+        }
+        if (matches == 1)
+            return found;
+        if (matches > 1) {
+            error = std::format("Multiple devices named '{}' found — use --mac to disambiguate.\n{}",
+                                name, format_device_table(devices));
+            return nullptr;
+        }
+        error = std::format("Device with name '{}' not found.\n{}", name, format_device_table(devices));
+        return nullptr;
+    }
+
+    // Match by IP
+    if (!ip.empty()) {
+        for (const auto& d : devices) {
+            if (d.ip_address == ip)
+                return &d;
+        }
+        error = std::format("Device with IP {} not found.\n{}", ip, format_device_table(devices));
+        return nullptr;
+    }
+
+    // No identifier given — auto-select if exactly one device
+    if (devices.size() == 1) {
+        return &devices[0];
+    }
+
+    error = std::format("Multiple devices found — use --mac, --name, or -i to specify the target.\n{}",
+                        format_device_table(devices));
+    return nullptr;
+}
+
 // ---------------------------------------------------------------------------
 // VirCom SET_CONFIG helpers
 // ---------------------------------------------------------------------------

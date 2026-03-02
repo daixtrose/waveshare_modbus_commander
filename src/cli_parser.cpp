@@ -104,7 +104,10 @@ namespace waveshare
             ->default_val(3000);
 
         app.add_option("--mac", options.target_mac,
-                       "Target device MAC address (e.g. 28:80:ca:ea:41:f3) for --set-ip / --set-dhcp");
+                       "Target device MAC address (e.g. 28:80:ca:ea:41:f3)");
+
+        app.add_option("--name", options.target_name,
+                       "Target device name (e.g. \"Hero 1\") — resolved via network scan");
 
         std::vector<std::string> set_ip_args;
         auto set_ip_option = app.add_option("--set-ip", set_ip_args,

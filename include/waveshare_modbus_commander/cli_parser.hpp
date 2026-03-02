@@ -79,7 +79,8 @@ struct CommandLineOptions {
     int dhcp_wait_timeout_ms = 30000;
     bool ip_explicitly_set = false;
 
-    std::string target_mac;       ///< --mac: target device MAC for set-ip/set-dhcp
+    std::string target_mac;       ///< --mac: target device MAC address
+    std::string target_name;      ///< --name: target device name
     std::string set_ip_address;   ///< --set-ip: new static IP
     std::string set_subnet_mask;  ///< --set-ip: new subnet mask
     std::string set_gateway;      ///< --set-ip: new gateway

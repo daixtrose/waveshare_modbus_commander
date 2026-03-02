@@ -96,6 +96,9 @@ switched off safely. Requires a Modbus TCP connection to the device.
 
 # Explicit IP / port
 ./build/bin/waveshare_modbus_commander -i 192.168.178.69 -p 502 --iterate-relais-switches
+
+# By device name (IP resolved via network scan)
+./build/bin/waveshare_modbus_commander --name "Hero 1" --iterate-relais-switches
 ```
 
 Example output:
@@ -163,9 +166,11 @@ IP Address       MAC Address        Device Name  Port  Subnet Mask      Gateway 
 
 ### Device IP Configuration
 
-All configuration commands identify the target device by its MAC address.
-When only a single device is found on the network, it is auto-selected.
-When multiple devices exist, `--mac` is required.
+All configuration commands identify the target device via a network scan.
+You can specify the target by MAC address (`--mac`), device name (`--name`),
+or IP address (`-i`). When only a single device is found on the network, it
+is auto-selected. When multiple devices exist, one of these identifiers is
+required.
 
 #### Set a static IP address
 
@@ -177,6 +182,10 @@ Assigns a static IP, subnet mask, gateway, and DNS server to the device.
 
 # Multiple devices — specify target by MAC
 ./build/bin/waveshare_modbus_commander --mac 28:80:ca:ec:41:f9 \
+    --set-ip 192.168.1.200 255.255.255.0 192.168.1.1 8.8.8.8
+
+# Or by device name
+./build/bin/waveshare_modbus_commander --name "Hero 1" \
     --set-ip 192.168.1.200 255.255.255.0 192.168.1.1 8.8.8.8
 ```
 
@@ -197,6 +206,9 @@ DHCP-assigned IP. The wait timeout is configurable (default 30 s).
 ```bash
 # Using MAC to target a specific device
 ./build/bin/waveshare_modbus_commander --mac 28:80:ca:ec:41:f9 --set-dhcp
+
+# Using device name
+./build/bin/waveshare_modbus_commander --name "WSDEV0002" --set-dhcp
 
 # Custom wait timeout (10 seconds)
 ./build/bin/waveshare_modbus_commander --mac 28:80:ca:ec:41:f9 --set-dhcp --dhcp-wait-timeout 10000
@@ -226,11 +238,14 @@ IP Address       MAC Address        Device Name  Port  Subnet Mask      Gateway 
 #### Set the device name
 
 Changes the device name (max 9 ASCII characters). The device is identified
-by MAC when multiple devices are present.
+by MAC or name when multiple devices are present.
 
 ```bash
-# Rename a device
+# Rename a device (by MAC)
 ./build/bin/waveshare_modbus_commander --mac 28:80:ca:ea:41:f3 --set-name RELAY01
+
+# Rename a device (by current name)
+./build/bin/waveshare_modbus_commander --name "Hero 1" --set-name "Loser 1"
 
 # Name too long — rejected with an error
 ./build/bin/waveshare_modbus_commander --mac 28:80:ca:ea:41:f3 --set-name ABCDEFGHIJ
@@ -264,6 +279,9 @@ mode. The port defaults to 502 but can be overridden.
 
 # Custom port
 ./build/bin/waveshare_modbus_commander --mac 28:80:ca:ec:41:f9 --set-modbus-tcp --modbus-tcp-port 4502
+
+# By device name
+./build/bin/waveshare_modbus_commander --name "WSDEV0002" --set-modbus-tcp
 ```
 
 Example output:
@@ -284,6 +302,9 @@ and you only want to switch to a non-standard port.
 ```bash
 # Change port to 9876
 ./build/bin/waveshare_modbus_commander --mac 28:80:ca:ea:41:f3 --set-modbus-tcp-port 9876
+
+# By device name
+./build/bin/waveshare_modbus_commander --name "Hero 1" --set-modbus-tcp-port 9876
 
 # Change port back to standard 502
 ./build/bin/waveshare_modbus_commander --mac 28:80:ca:ea:41:f3 --set-modbus-tcp-port 502
