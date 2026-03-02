@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25...4.2)
 
 project(waveshare_modbus_commander
-    VERSION 0.4.0
+    VERSION 0.5.0
     DESCRIPTION "CLI commander for generic Modbus TCP devices"
     LANGUAGES CXX
 )
