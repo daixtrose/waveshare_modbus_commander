@@ -9,6 +9,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <format>
+#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <thread>
@@ -144,34 +145,24 @@ int main(int argc, char *argv[])
             }
         }
 
-        // Process all requested actions
-        //
-        // When chaining multiple VirCom configuration commands (e.g.
-        // --set-name "X" --set-modbus-tcp-port 502), the device reboots
-        // after each one and its name / IP may have changed.  We lock in
-        // the MAC address after the first resolution so that subsequent
-        // actions can always find the device regardless of name/IP changes.
-        std::string resolved_mac;   // set once, reused across actions
+        // ── Helpers for the action loop ────────────────────────────────
 
-        // Helper: scan the network, resolve the target device (using the
-        // locked MAC when available), and return a pointer into `devices`.
-        // `devices` is an out-parameter so the pointer remains valid.
-        //
-        // When resolved_mac is set (i.e. we already identified the device
-        // in a previous action) and the device isn't found on the first
-        // scan, we keep retrying via wait_for_device_reboot — the device
-        // may still be finishing its reboot from the previous config change.
+        // MAC address locked after first VirCom resolution so that chained
+        // commands survive name/IP changes and reboots.
+        std::string resolved_mac;
+
+        // Scan the network and resolve the target device.  If resolved_mac
+        // is already set and the device isn't found immediately, keep
+        // retrying (the device may still be rebooting from a prior config).
         auto resolve_device = [&](std::vector<waveshare::DiscoveredDevice>& devices)
             -> const waveshare::DiscoveredDevice*
         {
             std::string target;
-            if (options.ip_explicitly_set) {
-                target = options.ip_address;
-            }
+            if (options.ip_explicitly_set) target = options.ip_address;
+
             devices = waveshare::scan_network(options.scan_timeout_ms,
                                               options.debug, target);
 
-            // After the first action, always match by MAC
             std::string mac  = !resolved_mac.empty() ? resolved_mac : options.target_mac;
             std::string name = !resolved_mac.empty() ? ""           : options.target_name;
             std::string ip   = !resolved_mac.empty() ? ""
@@ -182,9 +173,6 @@ int main(int argc, char *argv[])
                 devices, mac, name, ip, error);
 
             if (!dev && !resolved_mac.empty()) {
-                // Device was previously resolved but didn't show up yet —
-                // it may still be rebooting.  Keep scanning until it
-                // reappears or the timeout expires.
                 auto reappeared = waveshare::wait_for_device_reboot(
                     resolved_mac, options.wait_timeout_ms, options.debug);
                 if (reappeared) {
@@ -194,22 +182,44 @@ int main(int argc, char *argv[])
                 portable::println(stderr, "Device {} did not reappear.", resolved_mac);
                 return nullptr;
             }
-
             if (!dev) {
-                if (devices.empty()) {
-                    portable::println(stderr, "No devices found on the network.");
-                } else {
-                    portable::println(stderr, "{}", error);
-                }
+                portable::println(stderr, "{}", devices.empty()
+                    ? "No devices found on the network." : error);
                 return nullptr;
             }
-
-            // Lock in the MAC for all subsequent actions
-            if (resolved_mac.empty()) {
-                resolved_mac = dev->mac_address;
-            }
+            if (resolved_mac.empty()) resolved_mac = dev->mac_address;
             return dev;
         };
+
+        // Resolve target, apply a VirCom configuration, wait for reboot.
+        // `configure` receives the resolved device and returns true on success.
+        auto resolve_configure_wait = [&](
+            std::function<bool(const waveshare::DiscoveredDevice&)> configure) -> int
+        {
+            std::vector<waveshare::DiscoveredDevice> devices;
+            const auto* dev = resolve_device(devices);
+            if (!dev) return EXIT_FAILURE;
+
+            if (!configure(*dev)) {
+                portable::println(stderr, "Failed to send configuration.");
+                return EXIT_FAILURE;
+            }
+
+            auto reappeared = waveshare::wait_for_device_reboot(
+                dev->mac_address, options.wait_timeout_ms, options.debug);
+            return reappeared ? EXIT_SUCCESS : EXIT_FAILURE;
+        };
+
+        // Execute a Modbus operation on each element of `args`, converting
+        // the first field to a numeric address.
+        auto for_each_addr = [](const auto& args, auto&& body) {
+            for (const auto& a : args) {
+                try { body(a); }
+                catch (const std::exception& e) { portable::println("Error: {}", e.what()); }
+            }
+        };
+
+        // ── Action loop ────────────────────────────────────────────────
 
         for (const auto &action : options.actions)
         {
@@ -217,187 +227,102 @@ int main(int argc, char *argv[])
             {
             case waveshare::CommandLineAction::READ_COIL:
                 portable::println("=== Read Coil ===");
-                for (const auto &args : options.read_coil_args)
-                {
-                    try
-                    {
-                        auto addr = std::stoi(args.address, nullptr, 0);
-                        bool value;
-                        if (conn->read_coil(static_cast<uint16_t>(addr), value))
-                        {
-                            portable::println("Coil 0x{:04X}: {} ({})", addr, value ? "ON" : "OFF", value);
-                        }
-                        else
-                        {
-                            portable::println("Failed to read coil 0x{:04X}: {}", addr, conn->get_last_error());
-                        }
-                    }
-                    catch (const std::exception &e)
-                    {
-                        portable::println("Error: {}", e.what());
-                    }
-                }
+                for_each_addr(options.read_coil_args, [&](const auto& args) {
+                    auto addr = std::stoi(args.address, nullptr, 0);
+                    bool value;
+                    if (conn->read_coil(static_cast<uint16_t>(addr), value))
+                        portable::println("Coil 0x{:04X}: {} ({})", addr, value ? "ON" : "OFF", value);
+                    else
+                        portable::println("Failed to read coil 0x{:04X}: {}", addr, conn->get_last_error());
+                });
                 break;
 
             case waveshare::CommandLineAction::READ_COILS:
                 portable::println("=== Read Coils ===");
-                for (const auto &args : options.read_coils_args)
-                {
-                    try
-                    {
-                        auto addr = std::stoi(args.address, nullptr, 0);
-                        auto count = std::stoi(args.count, nullptr, 0);
-                        
-                        std::vector<uint8_t> values(count);
-                        if (conn->read_coils(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
-                        {
-                            portable::println("Read {} coils starting at 0x{:04X}:", count, addr);
-                            for (int i = 0; i < count; ++i)
-                            {
-                                bool bit_value = (values[i / 8] & (1 << (i % 8))) != 0;
-                                portable::println("  Coil 0x{:04X} ({}): {} ({})", addr + i, addr + i, bit_value ? "ON" : "OFF", bit_value);
-                            }
+                for_each_addr(options.read_coils_args, [&](const auto& args) {
+                    auto addr = std::stoi(args.address, nullptr, 0);
+                    auto count = std::stoi(args.count, nullptr, 0);
+                    std::vector<uint8_t> values(count);
+                    if (conn->read_coils(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data())) {
+                        portable::println("Read {} coils starting at 0x{:04X}:", count, addr);
+                        for (int i = 0; i < count; ++i) {
+                            bool bit = (values[i / 8] & (1 << (i % 8))) != 0;
+                            portable::println("  Coil 0x{:04X} ({}): {} ({})", addr + i, addr + i, bit ? "ON" : "OFF", bit);
                         }
-                        else
-                        {
-                            portable::println("Failed to read coils 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn->get_last_error());
-                        }
+                    } else {
+                        portable::println("Failed to read coils 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn->get_last_error());
                     }
-                    catch (const std::exception &e)
-                    {
-                        portable::println("Error: {}", e.what());
-                    }
-                }
+                });
                 break;
 
             case waveshare::CommandLineAction::WRITE_COIL:
                 portable::println("=== Write Coil ===");
                 for (const auto &args : options.write_coil_args)
-                {
                     execute_write_coil(*conn, args);
-                }
                 break;
 
             case waveshare::CommandLineAction::WRITE_COILS:
                 portable::println("=== Write Coil Pairs ===");
                 for (const auto &args : options.write_coils_args)
-                {
                     execute_write_coil(*conn, args);
-                }
                 break;
 
             case waveshare::CommandLineAction::READ_REGISTER:
                 portable::println("=== Read Register ===");
-                for (const auto &args : options.read_register_args)
-                {
-                    try
-                    {
-                        auto addr = std::stoi(args.address, nullptr, 0);
-                        uint16_t value;
-                        if (conn->read_register(static_cast<uint16_t>(addr), value))
-                        {
-                            portable::println("Register 0x{:04X}: {} (0x{:04X})", addr, value, value);
-                        }
-                        else
-                        {
-                            portable::println("Failed to read register 0x{:04X}: {}", addr, conn->get_last_error());
-                        }
-                    }
-                    catch (const std::exception &e)
-                    {
-                        portable::println("Error: {}", e.what());
-                    }
-                }
+                for_each_addr(options.read_register_args, [&](const auto& args) {
+                    auto addr = std::stoi(args.address, nullptr, 0);
+                    uint16_t value;
+                    if (conn->read_register(static_cast<uint16_t>(addr), value))
+                        portable::println("Register 0x{:04X}: {} (0x{:04X})", addr, value, value);
+                    else
+                        portable::println("Failed to read register 0x{:04X}: {}", addr, conn->get_last_error());
+                });
                 break;
 
             case waveshare::CommandLineAction::READ_REGISTERS:
                 portable::println("=== Read Registers ===");
-                for (const auto &args : options.read_registers_args)
-                {
-                    try
-                    {
-                        auto addr = std::stoi(args.address, nullptr, 0);
-                        auto count = std::stoi(args.count, nullptr, 0);
-                        
-                        std::vector<uint16_t> values(count);
-                        if (conn->read_registers(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
-                        {
-                            portable::println("Read {} registers starting at 0x{:04X}:", count, addr);
-                            for (int i = 0; i < count; ++i)
-                            {
-                                portable::println("  Register 0x{:04X}: {} (0x{:04X})", addr + i, values[i], values[i]);
-                            }
-                        }
-                        else
-                        {
-                            portable::println("Failed to read registers 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn->get_last_error());
-                        }
+                for_each_addr(options.read_registers_args, [&](const auto& args) {
+                    auto addr = std::stoi(args.address, nullptr, 0);
+                    auto count = std::stoi(args.count, nullptr, 0);
+                    std::vector<uint16_t> values(count);
+                    if (conn->read_registers(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data())) {
+                        portable::println("Read {} registers starting at 0x{:04X}:", count, addr);
+                        for (int i = 0; i < count; ++i)
+                            portable::println("  Register 0x{:04X}: {} (0x{:04X})", addr + i, values[i], values[i]);
+                    } else {
+                        portable::println("Failed to read registers 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn->get_last_error());
                     }
-                    catch (const std::exception &e)
-                    {
-                        portable::println("Error: {}", e.what());
-                    }
-                }
+                });
                 break;
 
             case waveshare::CommandLineAction::WRITE_REGISTER:
                 portable::println("=== Write Register ===");
-                for (const auto &args : options.write_register_args)
-                {
-                    try
-                    {
-                        auto addr = std::stoi(args.address, nullptr, 0);
-                        auto value = std::stoi(args.value, nullptr, 0);
-                        
-                        if (conn->write_register(static_cast<uint16_t>(addr), static_cast<uint16_t>(value)))
-                        {
-                            portable::println("Register 0x{:04X} = {} (0x{:04X}) (SUCCESS)", addr, value, value);
-                        }
-                        else
-                        {
-                            portable::println("Register 0x{:04X} = {} (FAILED): {}", addr, value, conn->get_last_error());
-                        }
-                    }
-                    catch (const std::exception &e)
-                    {
-                        portable::println("Error: {}", e.what());
-                    }
-                }
+                for_each_addr(options.write_register_args, [&](const auto& args) {
+                    auto addr  = std::stoi(args.address, nullptr, 0);
+                    auto value = std::stoi(args.value, nullptr, 0);
+                    if (conn->write_register(static_cast<uint16_t>(addr), static_cast<uint16_t>(value)))
+                        portable::println("Register 0x{:04X} = {} (0x{:04X}) (SUCCESS)", addr, value, value);
+                    else
+                        portable::println("Register 0x{:04X} = {} (FAILED): {}", addr, value, conn->get_last_error());
+                });
                 break;
 
             case waveshare::CommandLineAction::WRITE_REGISTERS:
                 portable::println("=== Write Registers ===");
-                for (const auto &args : options.write_registers_args)
-                {
-                    try
-                    {
-                        auto addr = std::stoi(args.address, nullptr, 0);
-                        std::size_t count = args.values.size();
-                        
-                        std::vector<uint16_t> values;
-                        for (const auto& val_str : args.values)
-                        {
-                            values.push_back(static_cast<uint16_t>(std::stoi(val_str, nullptr, 0)));
-                        }
-                        
-                        if (conn->write_registers(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
-                        {
-                            portable::println("Successfully wrote {} registers starting at 0x{:04X}:", count, addr);
-                            for (std::size_t i = 0; i < count; ++i)
-                            {
-                                portable::println("  Register 0x{:04X}: {} (0x{:04X})", addr + i, values[i], values[i]);
-                            }
-                        }
-                        else
-                        {
-                            portable::println("Failed to write registers starting at 0x{:04X}: {}", addr, conn->get_last_error());
-                        }
+                for_each_addr(options.write_registers_args, [&](const auto& args) {
+                    auto addr = std::stoi(args.address, nullptr, 0);
+                    std::vector<uint16_t> values;
+                    for (const auto& v : args.values)
+                        values.push_back(static_cast<uint16_t>(std::stoi(v, nullptr, 0)));
+                    auto count = values.size();
+                    if (conn->write_registers(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data())) {
+                        portable::println("Successfully wrote {} registers starting at 0x{:04X}:", count, addr);
+                        for (std::size_t i = 0; i < count; ++i)
+                            portable::println("  Register 0x{:04X}: {} (0x{:04X})", addr + i, values[i], values[i]);
+                    } else {
+                        portable::println("Failed to write registers starting at 0x{:04X}: {}", addr, conn->get_last_error());
                     }
-                    catch (const std::exception &e)
-                    {
-                        portable::println("Error: {}", e.what());
-                    }
-                }
+                });
                 break;
 
             case waveshare::CommandLineAction::ITERATE_RELAY_SWITCHES:
@@ -503,31 +428,20 @@ int main(int argc, char *argv[])
             case waveshare::CommandLineAction::SET_STATIC_IP:
             {
                 portable::println("=== Set Static IP ===");
-
-                std::vector<waveshare::DiscoveredDevice> devices;
-                auto* target_dev = resolve_device(devices);
-                if (!target_dev) return EXIT_FAILURE;
-                portable::println("Target: {} ({}, {})",
-                                  target_dev->device_name, target_dev->mac_address, target_dev->ip_address);
-
-                if (waveshare::set_device_ip(*target_dev,
-                                             options.set_ip_address,
-                                             options.set_subnet_mask,
-                                             options.set_gateway,
-                                             options.set_dns,
-                                             options.debug)) {
-                    portable::println("Static IP configuration sent to device {}.", target_dev->mac_address);
+                auto rc = resolve_configure_wait([&](const waveshare::DiscoveredDevice& dev) {
+                    portable::println("Target: {} ({}, {})",
+                                      dev.device_name, dev.mac_address, dev.ip_address);
+                    if (!waveshare::set_device_ip(dev, options.set_ip_address,
+                                                  options.set_subnet_mask, options.set_gateway,
+                                                  options.set_dns, options.debug))
+                        return false;
+                    portable::println("Static IP configuration sent to device {}.", dev.mac_address);
                     portable::println("New IP: {}, Mask: {}, Gateway: {}, DNS: {}",
                                       options.set_ip_address, options.set_subnet_mask,
                                       options.set_gateway, options.set_dns);
-                } else {
-                    portable::println(stderr, "Failed to send configuration.");
-                    return EXIT_FAILURE;
-                }
-
-                auto reappeared = waveshare::wait_for_device_reboot(
-                    target_dev->mac_address, options.wait_timeout_ms, options.debug);
-                if (!reappeared) return EXIT_FAILURE;
+                    return true;
+                });
+                if (rc != EXIT_SUCCESS) return rc;
                 break;
             }
 
@@ -536,7 +450,7 @@ int main(int argc, char *argv[])
                 portable::println("=== Set DHCP Mode ===");
 
                 std::vector<waveshare::DiscoveredDevice> devices;
-                auto* target_dev = resolve_device(devices);
+                const auto* target_dev = resolve_device(devices);
                 if (!target_dev) return EXIT_FAILURE;
 
                 portable::println("Switching device {} ({}) to DHCP mode ...",
@@ -555,74 +469,49 @@ int main(int argc, char *argv[])
             case waveshare::CommandLineAction::SET_MODBUS_TCP:
             {
                 portable::println("=== Set Modbus TCP Protocol ===");
-
-                std::vector<waveshare::DiscoveredDevice> devices;
-                auto* target_dev = resolve_device(devices);
-                if (!target_dev) return EXIT_FAILURE;
-
-                if (waveshare::set_device_modbus_tcp(*target_dev,
-                                                      static_cast<uint16_t>(options.modbus_tcp_port),
-                                                      options.debug)) {
-                    portable::println("Modbus TCP configuration sent to device {}.",
-                                      target_dev->mac_address);
+                auto rc = resolve_configure_wait([&](const waveshare::DiscoveredDevice& dev) {
+                    if (!waveshare::set_device_modbus_tcp(
+                            dev, static_cast<uint16_t>(options.modbus_tcp_port), options.debug))
+                        return false;
+                    portable::println("Modbus TCP configuration sent to device {}.", dev.mac_address);
                     portable::println("Protocol: Modbus TCP, Work Mode: TCP Server, Port: {}",
                                       options.modbus_tcp_port);
-                } else {
-                    portable::println(stderr, "Failed to send configuration.");
-                    return EXIT_FAILURE;
-                }
-
-                auto reappeared = waveshare::wait_for_device_reboot(
-                    target_dev->mac_address, options.wait_timeout_ms, options.debug);
-                if (!reappeared) return EXIT_FAILURE;
+                    return true;
+                });
+                if (rc != EXIT_SUCCESS) return rc;
                 break;
             }
 
-            case waveshare::CommandLineAction::SET_MODBUS_TCP_PORT: {
+            case waveshare::CommandLineAction::SET_MODBUS_TCP_PORT:
+            {
                 portable::println("=== Set Modbus TCP Port ===");
-
-                std::vector<waveshare::DiscoveredDevice> devices;
-                auto* target_dev = resolve_device(devices);
-                if (!target_dev) return EXIT_FAILURE;
-
-                if (waveshare::set_device_port(*target_dev,
-                                               static_cast<uint16_t>(options.set_port_value),
-                                               options.debug)) {
+                auto rc = resolve_configure_wait([&](const waveshare::DiscoveredDevice& dev) {
+                    if (!waveshare::set_device_port(
+                            dev, static_cast<uint16_t>(options.set_port_value), options.debug))
+                        return false;
                     portable::println("Port changed to {} on device {}.",
-                                      options.set_port_value, target_dev->mac_address);
-                } else {
-                    portable::println(stderr, "Failed to send configuration.");
-                    return EXIT_FAILURE;
-                }
-
-                auto reappeared = waveshare::wait_for_device_reboot(
-                    target_dev->mac_address, options.wait_timeout_ms, options.debug);
-                if (!reappeared) return EXIT_FAILURE;
+                                      options.set_port_value, dev.mac_address);
+                    return true;
+                });
+                if (rc != EXIT_SUCCESS) return rc;
                 break;
             }
 
-            case waveshare::CommandLineAction::SET_NAME: {
+            case waveshare::CommandLineAction::SET_NAME:
+            {
                 if (options.set_name.size() > 9) {
                     portable::println(stderr, "Error: Device name '{}' is too long (max 9 characters, got {}).",
                                       options.set_name, options.set_name.size());
                     return EXIT_FAILURE;
                 }
-
-                std::vector<waveshare::DiscoveredDevice> devices;
-                auto* target_dev = resolve_device(devices);
-                if (!target_dev) return EXIT_FAILURE;
-
-                if (waveshare::set_device_name(*target_dev, options.set_name, options.debug)) {
+                auto rc = resolve_configure_wait([&](const waveshare::DiscoveredDevice& dev) {
+                    if (!waveshare::set_device_name(dev, options.set_name, options.debug))
+                        return false;
                     portable::println("Device name set to '{}' on device {}.",
-                                      options.set_name, target_dev->mac_address);
-                } else {
-                    portable::println(stderr, "Failed to send configuration.");
-                    return EXIT_FAILURE;
-                }
-
-                auto reappeared = waveshare::wait_for_device_reboot(
-                    target_dev->mac_address, options.wait_timeout_ms, options.debug);
-                if (!reappeared) return EXIT_FAILURE;
+                                      options.set_name, dev.mac_address);
+                    return true;
+                });
+                if (rc != EXIT_SUCCESS) return rc;
                 break;
             }
             }
