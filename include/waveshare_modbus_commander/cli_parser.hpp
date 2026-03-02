@@ -17,7 +17,8 @@ enum class CommandLineAction {
     READ_REGISTERS,
     WRITE_REGISTER,
     WRITE_REGISTERS,
-    ITERATE_RELAY_SWITCHES
+    ITERATE_RELAY_SWITCHES,
+    SCAN_NETWORK
 };
 
 struct CoilReadArgs {
@@ -69,6 +70,9 @@ struct CommandLineOptions {
     std::vector<RegisterWriteArgs> write_register_args;
     std::vector<RegistersWriteArgs> write_registers_args;
     
+    int scan_timeout_ms = 3000;
+    bool ip_explicitly_set = false;
+
     bool debug = false;
 }; 
 

@@ -31,6 +31,8 @@ namespace waveshare
                 return "WRITE_REGISTERS";
             case CommandLineAction::ITERATE_RELAY_SWITCHES:
                 return "ITERATE_RELAY_SWITCHES";
+            case CommandLineAction::SCAN_NETWORK:
+                return "SCAN_NETWORK";
             }
             return "UNKNOWN";
         }
@@ -45,7 +47,8 @@ namespace waveshare
         app.set_help_flag("-h,--help", "Show all available options");
 
         app.add_option("-i,--ip", options.ip_address, "IP address of the Modbus device")
-            ->default_val("192.168.1.2");
+            ->default_val("192.168.1.2")
+            ->each([&options](const std::string&) { options.ip_explicitly_set = true; });
         app.add_option("-p,--port", options.port, "Modbus TCP port")
             ->default_val(502);
         app.add_option("-t,--timeout", options.timeout_seconds, "Connection timeout in seconds")
@@ -81,6 +84,14 @@ namespace waveshare
         app.add_flag_callback("--iterate-relais-switches", [&options]()
                               { options.actions.push_back(CommandLineAction::ITERATE_RELAY_SWITCHES); },
                               "Iterate through relay switches: turn each coil on for 1s in sequence, repeat until Ctrl-C");
+
+        app.add_flag_callback("--scan-network", [&options]()
+                              { options.actions.push_back(CommandLineAction::SCAN_NETWORK); },
+                              "Scan the local network for Waveshare serial server devices via UDP broadcast");
+
+        app.add_option("--scan-timeout", options.scan_timeout_ms,
+                       "Timeout in milliseconds for network scan (default: 3000)")
+            ->default_val(3000);
 
         try
         {

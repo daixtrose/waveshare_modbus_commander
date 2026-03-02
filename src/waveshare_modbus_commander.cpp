@@ -1,6 +1,7 @@
 #include "libmodbus_cpp/modbus_connection.hpp"
 #include "waveshare_modbus_commander/cli_parser.hpp"
 #include "waveshare_modbus_commander/create_modbus_connection.hpp"
+#include "waveshare_modbus_commander/network_scanner.hpp"
 #include "waveshare_modbus_commander/portable_print.hpp"
 
 #include <atomic>
@@ -8,6 +9,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <format>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -90,13 +92,26 @@ int main(int argc, char *argv[])
             portable::println("");
         }
 
-        // Create and connect to device
-        auto conn = waveshare::create_modbus_connection(options.ip_address, options.port, options.timeout_seconds);
+        // Check if any action requires a Modbus connection
+        bool needs_connection = false;
+        for (const auto& action : options.actions) {
+            if (action != waveshare::CommandLineAction::SCAN_NETWORK &&
+                action != waveshare::CommandLineAction::NONE) {
+                needs_connection = true;
+                break;
+            }
+        }
 
-        if (options.debug)
-        {
-            portable::println("Connected successfully!");
-            portable::println("");
+        // Create and connect to device (only if needed)
+        std::optional<libmodbus_cpp::ModbusConnection> conn;
+        if (needs_connection) {
+            conn = waveshare::create_modbus_connection(options.ip_address, options.port, options.timeout_seconds);
+
+            if (options.debug)
+            {
+                portable::println("Connected successfully!");
+                portable::println("");
+            }
         }
 
         // Process all requested actions
@@ -112,13 +127,13 @@ int main(int argc, char *argv[])
                     {
                         auto addr = std::stoi(args.address, nullptr, 0);
                         bool value;
-                        if (conn.read_coil(static_cast<uint16_t>(addr), value))
+                        if (conn->read_coil(static_cast<uint16_t>(addr), value))
                         {
                             portable::println("Coil 0x{:04X}: {} ({})", addr, value ? "ON" : "OFF", value);
                         }
                         else
                         {
-                            portable::println("Failed to read coil 0x{:04X}: {}", addr, conn.get_last_error());
+                            portable::println("Failed to read coil 0x{:04X}: {}", addr, conn->get_last_error());
                         }
                     }
                     catch (const std::exception &e)
@@ -138,7 +153,7 @@ int main(int argc, char *argv[])
                         auto count = std::stoi(args.count, nullptr, 0);
                         
                         std::vector<uint8_t> values(count);
-                        if (conn.read_coils(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
+                        if (conn->read_coils(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
                         {
                             portable::println("Read {} coils starting at 0x{:04X}:", count, addr);
                             for (int i = 0; i < count; ++i)
@@ -149,7 +164,7 @@ int main(int argc, char *argv[])
                         }
                         else
                         {
-                            portable::println("Failed to read coils 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn.get_last_error());
+                            portable::println("Failed to read coils 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn->get_last_error());
                         }
                     }
                     catch (const std::exception &e)
@@ -163,7 +178,7 @@ int main(int argc, char *argv[])
                 portable::println("=== Write Coil ===");
                 for (const auto &args : options.write_coil_args)
                 {
-                    execute_write_coil(conn, args);
+                    execute_write_coil(*conn, args);
                 }
                 break;
 
@@ -171,7 +186,7 @@ int main(int argc, char *argv[])
                 portable::println("=== Write Coil Pairs ===");
                 for (const auto &args : options.write_coils_args)
                 {
-                    execute_write_coil(conn, args);
+                    execute_write_coil(*conn, args);
                 }
                 break;
 
@@ -183,13 +198,13 @@ int main(int argc, char *argv[])
                     {
                         auto addr = std::stoi(args.address, nullptr, 0);
                         uint16_t value;
-                        if (conn.read_register(static_cast<uint16_t>(addr), value))
+                        if (conn->read_register(static_cast<uint16_t>(addr), value))
                         {
                             portable::println("Register 0x{:04X}: {} (0x{:04X})", addr, value, value);
                         }
                         else
                         {
-                            portable::println("Failed to read register 0x{:04X}: {}", addr, conn.get_last_error());
+                            portable::println("Failed to read register 0x{:04X}: {}", addr, conn->get_last_error());
                         }
                     }
                     catch (const std::exception &e)
@@ -209,7 +224,7 @@ int main(int argc, char *argv[])
                         auto count = std::stoi(args.count, nullptr, 0);
                         
                         std::vector<uint16_t> values(count);
-                        if (conn.read_registers(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
+                        if (conn->read_registers(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
                         {
                             portable::println("Read {} registers starting at 0x{:04X}:", count, addr);
                             for (int i = 0; i < count; ++i)
@@ -219,7 +234,7 @@ int main(int argc, char *argv[])
                         }
                         else
                         {
-                            portable::println("Failed to read registers 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn.get_last_error());
+                            portable::println("Failed to read registers 0x{:04X}-0x{:04X}: {}", addr, addr + count - 1, conn->get_last_error());
                         }
                     }
                     catch (const std::exception &e)
@@ -238,13 +253,13 @@ int main(int argc, char *argv[])
                         auto addr = std::stoi(args.address, nullptr, 0);
                         auto value = std::stoi(args.value, nullptr, 0);
                         
-                        if (conn.write_register(static_cast<uint16_t>(addr), static_cast<uint16_t>(value)))
+                        if (conn->write_register(static_cast<uint16_t>(addr), static_cast<uint16_t>(value)))
                         {
                             portable::println("Register 0x{:04X} = {} (0x{:04X}) (SUCCESS)", addr, value, value);
                         }
                         else
                         {
-                            portable::println("Register 0x{:04X} = {} (FAILED): {}", addr, value, conn.get_last_error());
+                            portable::println("Register 0x{:04X} = {} (FAILED): {}", addr, value, conn->get_last_error());
                         }
                     }
                     catch (const std::exception &e)
@@ -269,7 +284,7 @@ int main(int argc, char *argv[])
                             values.push_back(static_cast<uint16_t>(std::stoi(val_str, nullptr, 0)));
                         }
                         
-                        if (conn.write_registers(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
+                        if (conn->write_registers(static_cast<uint16_t>(addr), static_cast<uint16_t>(count), values.data()))
                         {
                             portable::println("Successfully wrote {} registers starting at 0x{:04X}:", count, addr);
                             for (std::size_t i = 0; i < count; ++i)
@@ -279,7 +294,7 @@ int main(int argc, char *argv[])
                         }
                         else
                         {
-                            portable::println("Failed to write registers starting at 0x{:04X}: {}", addr, conn.get_last_error());
+                            portable::println("Failed to write registers starting at 0x{:04X}: {}", addr, conn->get_last_error());
                         }
                     }
                     catch (const std::exception &e)
@@ -298,9 +313,9 @@ int main(int argc, char *argv[])
                 auto prev_handler = std::signal(SIGINT, sigint_handler);
 
                 // Turn all relays off first (address 0x00FF = all relays)
-                if (!conn.write_coil(0x00FF, false))
+                if (!conn->write_coil(0x00FF, false))
                 {
-                    portable::println("FAILED to turn all relays off: {}", conn.get_last_error());
+                    portable::println("FAILED to turn all relays off: {}", conn->get_last_error());
                     break;
                 }
                 portable::println("All relays OFF");
@@ -316,9 +331,9 @@ int main(int argc, char *argv[])
                         uint16_t addr = static_cast<uint16_t>(i);
 
                         // Turn coil on
-                        if (!conn.write_coil(addr, true))
+                        if (!conn->write_coil(addr, true))
                         {
-                            portable::println("FAILED to turn coil {} ON: {}", i + 1, conn.get_last_error());
+                            portable::println("FAILED to turn coil {} ON: {}", i + 1, conn->get_last_error());
                             continue;
                         }
                         portable::println("Coil {} ON", i + 1);
@@ -330,9 +345,9 @@ int main(int argc, char *argv[])
                         }
 
                         // Turn coil off
-                        if (!conn.write_coil(addr, false))
+                        if (!conn->write_coil(addr, false))
                         {
-                            portable::println("FAILED to turn coil {} OFF: {}", i + 1, conn.get_last_error());
+                            portable::println("FAILED to turn coil {} OFF: {}", i + 1, conn->get_last_error());
                         }
                         else
                         {
@@ -354,13 +369,13 @@ int main(int argc, char *argv[])
 
                 // Ensure all relays are off on exit
                 portable::println("\nInterrupted — turning all relays OFF ...");
-                if (conn.write_coil(0x00FF, false))
+                if (conn->write_coil(0x00FF, false))
                 {
                     portable::println("All relays OFF (safe shutdown)");
                 }
                 else
                 {
-                    portable::println("WARNING: failed to turn all relays off: {}", conn.get_last_error());
+                    portable::println("WARNING: failed to turn all relays off: {}", conn->get_last_error());
                 }
 
                 // Restore previous signal handler
@@ -371,6 +386,23 @@ int main(int argc, char *argv[])
             case waveshare::CommandLineAction::NONE:
                 portable::println("No action specified. Use --help to see available options.");
                 break;
+
+            case waveshare::CommandLineAction::SCAN_NETWORK:
+            {
+                portable::println("=== Scanning network for Waveshare devices ===");
+                // Pass the user-specified IP as a unicast probe target.
+                // This ensures discovery works even from NATed environments
+                // (e.g. WSL2) where broadcasts don't reach the physical LAN.
+                std::string target;
+                if (options.ip_explicitly_set) {
+                    target = options.ip_address;
+                }
+                auto devices = waveshare::scan_network(options.scan_timeout_ms,
+                                                       options.debug,
+                                                       target);
+                portable::println("{}", waveshare::format_device_table(devices));
+                break;
+            }
             }
         }
 

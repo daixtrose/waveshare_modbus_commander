@@ -40,6 +40,7 @@ add_executable(waveshare_modbus_commander
     ${CMAKE_CURRENT_LIST_DIR}/src/waveshare_modbus_commander.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/cli_parser.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/create_modbus_connection.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/network_scanner.cpp
 )
 
 set_target_properties(waveshare_modbus_commander PROPERTIES
@@ -56,6 +57,11 @@ target_link_libraries(waveshare_modbus_commander
         modbus_cpp
         CLI11::CLI11
 )
+
+# network_scanner.cpp uses BSD sockets directly; link ws2_32 on Windows
+if(WIN32)
+    target_link_libraries(waveshare_modbus_commander PRIVATE ws2_32)
+endif()
 
 target_compile_features(waveshare_modbus_commander PRIVATE cxx_std_23)
 
