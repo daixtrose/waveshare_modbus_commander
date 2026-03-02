@@ -118,8 +118,8 @@ namespace waveshare
                               { options.actions.push_back(CommandLineAction::SET_DHCP); },
                               "Set a device to DHCP mode (use --mac to identify the target device)");
 
-        app.add_option("--dhcp-wait-timeout", options.dhcp_wait_timeout_ms,
-                       "How long to wait (ms) for DHCP IP assignment after --set-dhcp (default: 30000)")
+        app.add_option("--wait-timeout", options.wait_timeout_ms,
+                       "How long to wait (ms) for device to reappear after a configuration change (default: 30000)")
             ->default_val(30000);
 
         app.add_flag_callback("--set-modbus-tcp", [&options]()
