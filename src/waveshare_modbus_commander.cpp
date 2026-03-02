@@ -156,6 +156,11 @@ int main(int argc, char *argv[])
         // Helper: scan the network, resolve the target device (using the
         // locked MAC when available), and return a pointer into `devices`.
         // `devices` is an out-parameter so the pointer remains valid.
+        //
+        // When resolved_mac is set (i.e. we already identified the device
+        // in a previous action) and the device isn't found on the first
+        // scan, we keep retrying via wait_for_device_reboot — the device
+        // may still be finishing its reboot from the previous config change.
         auto resolve_device = [&](std::vector<waveshare::DiscoveredDevice>& devices)
             -> const waveshare::DiscoveredDevice*
         {
@@ -165,10 +170,6 @@ int main(int argc, char *argv[])
             }
             devices = waveshare::scan_network(options.scan_timeout_ms,
                                               options.debug, target);
-            if (devices.empty()) {
-                portable::println(stderr, "No devices found on the network.");
-                return nullptr;
-            }
 
             // After the first action, always match by MAC
             std::string mac  = !resolved_mac.empty() ? resolved_mac : options.target_mac;
@@ -179,10 +180,30 @@ int main(int argc, char *argv[])
             std::string error;
             const auto* dev = waveshare::resolve_target_device(
                 devices, mac, name, ip, error);
-            if (!dev) {
-                portable::println(stderr, "{}", error);
+
+            if (!dev && !resolved_mac.empty()) {
+                // Device was previously resolved but didn't show up yet —
+                // it may still be rebooting.  Keep scanning until it
+                // reappears or the timeout expires.
+                auto reappeared = waveshare::wait_for_device_reboot(
+                    resolved_mac, options.wait_timeout_ms, options.debug);
+                if (reappeared) {
+                    devices = {*reappeared};
+                    return &devices[0];
+                }
+                portable::println(stderr, "Device {} did not reappear.", resolved_mac);
                 return nullptr;
             }
+
+            if (!dev) {
+                if (devices.empty()) {
+                    portable::println(stderr, "No devices found on the network.");
+                } else {
+                    portable::println(stderr, "{}", error);
+                }
+                return nullptr;
+            }
+
             // Lock in the MAC for all subsequent actions
             if (resolved_mac.empty()) {
                 resolved_mac = dev->mac_address;
