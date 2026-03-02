@@ -112,6 +112,9 @@ bool parse_response(const uint8_t* data, size_t len, DiscoveredDevice& dev)
     dev.dns_server  = format_ip(&data[15]);
     dev.baud_rate_index = data[0x16];
 
+    // Port: uint16 big-endian at offset 0x13-0x14
+    dev.port = static_cast<uint16_t>((data[0x13] << 8) | data[0x14]);
+
     // DHCP flag at offset 0x3B:  0 = Static, 1 = DHCP
     dev.ip_mode = data[0x3B];
 
@@ -606,6 +609,7 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
     size_t w_ip   = 15;  // "IP Address"
     size_t w_mac  = 17;  // "MAC Address"
     size_t w_name = 11;  // "Device Name"
+    size_t w_port = 4;   // "Port"
     size_t w_mask = 15;  // "Subnet Mask"
     size_t w_gw   = 15;  // "Gateway"
     size_t w_mode = 7;   // "IP Mode"
@@ -615,6 +619,7 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
         w_ip   = std::max(w_ip,   d.ip_address.size());
         w_mac  = std::max(w_mac,  d.mac_address.size());
         w_name = std::max(w_name, d.device_name.size());
+        w_port = std::max(w_port, std::to_string(d.port).size());
         w_mask = std::max(w_mask, d.subnet_mask.size());
         w_gw   = std::max(w_gw,   d.gateway.size());
         w_mod  = std::max(w_mod,  d.module_id.size());
@@ -623,10 +628,11 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
     std::string out;
 
     // Header
-    out += std::format("{:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}\n",
+    out += std::format("{:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}\n",
                        "IP Address", w_ip,
                        "MAC Address", w_mac,
                        "Device Name", w_name,
+                       "Port", w_port,
                        "Subnet Mask", w_mask,
                        "Gateway", w_gw,
                        "IP Mode", w_mode,
@@ -636,6 +642,7 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
     out += std::string(w_ip, '-') + "  " +
            std::string(w_mac, '-') + "  " +
            std::string(w_name, '-') + "  " +
+           std::string(w_port, '-') + "  " +
            std::string(w_mask, '-') + "  " +
            std::string(w_gw, '-') + "  " +
            std::string(w_mode, '-') + "  " +
@@ -644,10 +651,11 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
     // Rows
     for (const auto& d : devices) {
         std::string mode = (d.ip_mode == 1) ? "DHCP" : "Static";
-        out += std::format("{:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}\n",
+        out += std::format("{:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}\n",
                            d.ip_address, w_ip,
                            d.mac_address, w_mac,
                            d.device_name, w_name,
+                           std::to_string(d.port), w_port,
                            d.subnet_mask, w_mask,
                            d.gateway, w_gw,
                            mode, w_mode,

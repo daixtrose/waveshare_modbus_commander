@@ -112,10 +112,10 @@ Example output:
 
 ```
 === Scanning network for Waveshare devices ===
-IP Address       MAC Address        Device Name  Subnet Mask      Gateway          IP Mode  Module ID
----------------  -----------------  -----------  ---------------  ---------------  -------  ----------
-192.168.178.69   28:80:ca:ea:41:f3  WSDEV0001    255.255.255.0    192.168.178.1    DHCP     8888888888
-192.168.1.200    28:80:ca:ec:41:f9  WSDEV0002    255.255.255.0    192.168.1.1      Static   8888888888
+IP Address       MAC Address        Device Name  Port  Subnet Mask      Gateway          IP Mode  Module ID
+---------------  -----------------  -----------  ----  ---------------  ---------------  -------  ----------
+192.168.178.69   28:80:ca:ea:41:f3  WSDEV0001    502   255.255.255.0    192.168.178.1    DHCP     8888888888
+192.168.1.200    28:80:ca:ec:41:f9  WSDEV0002    502   255.255.255.0    192.168.1.1      Static   8888888888
 
 2 device(s) found.
 ```
@@ -173,9 +173,9 @@ Scanning for device 28:80:ca:ec:41:f9 (3s / 30s) ...
 Scanning for device 28:80:ca:ec:41:f9 (8s / 30s) ...
 Device 28:80:ca:ec:41:f9 reappeared at 192.168.178.69 (DHCP)
 Device is now at 192.168.178.69 (DHCP)
-IP Address       MAC Address        Device Name  Subnet Mask      Gateway          IP Mode  Module ID
----------------  -----------------  -----------  ---------------  ---------------  -------  ----------
-192.168.178.69   28:80:ca:ec:41:f9  WSDEV0002    255.255.255.0    192.168.178.1    DHCP     8888888888
+IP Address       MAC Address        Device Name  Port  Subnet Mask      Gateway          IP Mode  Module ID
+---------------  -----------------  -----------  ----  ---------------  ---------------  -------  ----------
+192.168.178.69   28:80:ca:ec:41:f9  WSDEV0002    502   255.255.255.0    192.168.178.1    DHCP     8888888888
 
 1 device(s) found.
 ```

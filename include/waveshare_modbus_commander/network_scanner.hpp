@@ -22,6 +22,7 @@ struct DiscoveredDevice {
     std::string device_name;    ///< e.g. "WSDEV0001"
     std::string module_id;      ///< 10-byte module identifier
     std::string parameters;     ///< URL-encoded parameter string (e.g. "dsp=4196&ipm=1&bd")
+    uint16_t port = 0;          ///< Listening port (offset 0x13-0x14, uint16 big-endian)
     uint8_t ip_mode = 0;        ///< 0 = Static, 1 = DHCP  (offset 0x3B)
     uint8_t baud_rate_index = 0;
 
