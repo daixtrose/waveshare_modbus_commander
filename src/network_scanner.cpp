@@ -574,7 +574,7 @@ std::vector<DiscoveredDevice> scan_network(int timeout_ms, bool debug,
                     portable::println("  Gateway:     {}", dev.gateway);
                     portable::println("  DNS:         {}", dev.dns_server);
                     portable::println("  IP mode:     {} ({})", dev.ip_mode,
-                                      dev.ip_mode == 1 ? "Static" : "DHCP");
+                                      dev.ip_mode == 1 ? "DHCP" : "Static");
                     portable::println("  Parameters:  {}", dev.parameters);
                 }
                 devices.push_back(std::move(dev));
@@ -631,7 +631,7 @@ std::string format_device_table(const std::vector<DiscoveredDevice>& devices)
 
     // Rows
     for (const auto& d : devices) {
-        std::string mode = (d.ip_mode == 1) ? "Static" : "DHCP";
+        std::string mode = (d.ip_mode == 1) ? "DHCP" : "Static";
         out += std::format("{:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}  {:<{}}\n",
                            d.ip_address, w_ip,
                            d.device_name, w_name,
