@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25...4.2)
 
 project(waveshare_modbus_commander
-    VERSION 0.8.1
+    VERSION 0.8.2
     DESCRIPTION "CLI commander for generic Modbus TCP devices"
     LANGUAGES CXX
 )
@@ -62,6 +62,10 @@ target_link_libraries(waveshare_modbus_commander
 if(WIN32)
     target_link_libraries(waveshare_modbus_commander PRIVATE ws2_32 iphlpapi)
 endif()
+
+target_compile_definitions(waveshare_modbus_commander PRIVATE
+    PROJECT_VERSION="${PROJECT_VERSION}"
+)
 
 target_compile_features(waveshare_modbus_commander PRIVATE cxx_std_23)
 
