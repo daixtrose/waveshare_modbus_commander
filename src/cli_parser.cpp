@@ -61,6 +61,7 @@ namespace waveshare
 
         CLI::App app{"Waveshare Modbus Commander - Universal Modbus TCP tool for coil and register operations"};
         app.set_help_flag("-h,--help", "Show all available options");
+        app.set_version_flag("-V,--version", PROJECT_VERSION, "Show program version");
 
         app.add_option("-i,--ip", options.ip_address, "IP address of the Modbus device")
             ->default_val("192.168.1.2")
