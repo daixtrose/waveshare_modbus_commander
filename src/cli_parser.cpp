@@ -1,7 +1,11 @@
 #include "waveshare_modbus_commander/cli_parser.hpp"
 #include "CLI/CLI.hpp"
 
+#include <algorithm>
+#include <cstring>
 #include <format>
+#include <limits>
+#include <unordered_map>
 
 namespace waveshare
 {
@@ -152,15 +156,13 @@ namespace waveshare
             exit(e.get_exit_code());
         }
 
-        // Process coil operations
+        // Process coil operations (post-parse value extraction)
         if (read_coil_option->count() > 0)
         {
             options.actions.push_back(CommandLineAction::READ_COIL);
             auto results = read_coil_option->results();
             for (const auto& result : results)
-            {
                 options.read_coil_args.push_back({result});
-            }
         }
 
         if (read_coils_option->count() > 0)
@@ -168,9 +170,7 @@ namespace waveshare
             options.actions.push_back(CommandLineAction::READ_COILS);
             auto results = read_coils_option->results();
             for (std::size_t i = 0; i + 1 < results.size(); i += 2)
-            {
                 options.read_coils_args.push_back({results[i], results[i + 1]});
-            }
         }
 
         if (write_coil_option->count() > 0)
@@ -178,9 +178,7 @@ namespace waveshare
             options.actions.push_back(CommandLineAction::WRITE_COIL);
             auto results = write_coil_option->results();
             for (std::size_t i = 0; i + 1 < results.size(); i += 2)
-            {
                 options.write_coil_args.push_back({results[i], results[i + 1]});
-            }
         }
 
         if (write_coils_option->count() > 0)
@@ -188,14 +186,9 @@ namespace waveshare
             options.actions.push_back(CommandLineAction::WRITE_COILS);
             auto results = write_coils_option->results();
             if (results.size() % 2 != 0)
-            {
                 throw CLI::ValidationError("--write-coils", "requires an even number of values: address1 state1 [address2 state2 ...]");
-            }
-
             for (std::size_t i = 0; i + 1 < results.size(); i += 2)
-            {
                 options.write_coils_args.push_back({results[i], results[i + 1]});
-            }
         }
 
         // Process register operations
@@ -204,9 +197,7 @@ namespace waveshare
             options.actions.push_back(CommandLineAction::READ_REGISTER);
             auto results = read_register_option->results();
             for (const auto& result : results)
-            {
                 options.read_register_args.push_back({result});
-            }
         }
 
         if (read_registers_option->count() > 0)
@@ -214,9 +205,7 @@ namespace waveshare
             options.actions.push_back(CommandLineAction::READ_REGISTERS);
             auto results = read_registers_option->results();
             for (std::size_t i = 0; i + 1 < results.size(); i += 2)
-            {
                 options.read_registers_args.push_back({results[i], results[i + 1]});
-            }
         }
 
         if (write_register_option->count() > 0)
@@ -224,9 +213,7 @@ namespace waveshare
             options.actions.push_back(CommandLineAction::WRITE_REGISTER);
             auto results = write_register_option->results();
             for (std::size_t i = 0; i + 1 < results.size(); i += 2)
-            {
                 options.write_register_args.push_back({results[i], results[i + 1]});
-            }
         }
 
         if (write_registers_option->count() > 0)
@@ -238,14 +225,12 @@ namespace waveshare
                 RegistersWriteArgs args;
                 args.address = results[0];
                 for (std::size_t i = 1; i < results.size(); ++i)
-                {
                     args.values.push_back(results[i]);
-                }
                 options.write_registers_args.push_back(args);
             }
         }
 
-        // Process --set-ip (4 positional args: ip mask gateway dns)
+        // Process --set-ip
         if (set_ip_option->count() > 0)
         {
             options.actions.push_back(CommandLineAction::SET_STATIC_IP);
@@ -260,15 +245,51 @@ namespace waveshare
 
         // Process --set-name
         if (set_name_option->count() > 0)
-        {
             options.actions.push_back(CommandLineAction::SET_NAME);
-        }
 
         // Process --set-modbus-tcp-port
         if (set_port_option->count() > 0)
-        {
             options.actions.push_back(CommandLineAction::SET_MODBUS_TCP_PORT);
-        }
+
+        // ── Sort actions to match command-line order ─────────────────
+        // Flag callbacks (--set-modbus-tcp, --set-dhcp, --scan-network,
+        // --iterate-relais-switches, --read-digital-inputs) push their
+        // action during app.parse(), while valued options (--set-ip,
+        // --set-name, --set-modbus-tcp-port, coil/register ops) push
+        // theirs post-parse.  This can cause misordering when chaining
+        // commands.  Fix: sort the action list by argv position.
+        static const std::unordered_map<CommandLineAction, std::string> action_flag = {
+            {CommandLineAction::READ_COIL,              "--read-coil"},
+            {CommandLineAction::READ_COILS,             "--read-coils"},
+            {CommandLineAction::WRITE_COIL,             "--write-coil"},
+            {CommandLineAction::WRITE_COILS,            "--write-coils"},
+            {CommandLineAction::READ_REGISTER,          "--read-register"},
+            {CommandLineAction::READ_REGISTERS,         "--read-registers"},
+            {CommandLineAction::WRITE_REGISTER,         "--write-register"},
+            {CommandLineAction::WRITE_REGISTERS,        "--write-registers"},
+            {CommandLineAction::ITERATE_RELAY_SWITCHES, "--iterate-relais-switches"},
+            {CommandLineAction::READ_DIGITAL_INPUTS,    "--read-digital-inputs"},
+            {CommandLineAction::SCAN_NETWORK,           "--scan-network"},
+            {CommandLineAction::SET_STATIC_IP,          "--set-ip"},
+            {CommandLineAction::SET_DHCP,               "--set-dhcp"},
+            {CommandLineAction::SET_MODBUS_TCP,         "--set-modbus-tcp"},
+            {CommandLineAction::SET_MODBUS_TCP_PORT,    "--set-modbus-tcp-port"},
+            {CommandLineAction::SET_NAME,               "--set-name"},
+        };
+
+        auto argv_position = [&](CommandLineAction action) -> int {
+            auto it = action_flag.find(action);
+            if (it == action_flag.end())
+                return std::numeric_limits<int>::max();
+            for (int i = 1; i < argc; ++i)
+                if (it->second == argv[i])
+                    return i;
+            return std::numeric_limits<int>::max();
+        };
+
+        options.actions.sort([&](CommandLineAction a, CommandLineAction b) {
+            return argv_position(a) < argv_position(b);
+        });
 
         return options;
     }
