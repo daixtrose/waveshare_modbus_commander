@@ -18,7 +18,9 @@
 #  endif
 #  include <winsock2.h>
 #  include <ws2tcpip.h>
+#  include <iphlpapi.h>
 #  pragma comment(lib, "ws2_32.lib")
+#  pragma comment(lib, "iphlpapi.lib")
    using socket_t = SOCKET;
    constexpr socket_t INVALID_SOCK = INVALID_SOCKET;
    inline int close_socket(socket_t s) { return closesocket(s); }
@@ -311,9 +313,61 @@ std::vector<in_addr> get_interface_broadcast_addresses()
     std::vector<in_addr> addrs;
 
 #ifdef _WIN32
-    // On Windows, the limited broadcast (255.255.255.255) is usually
-    // sufficient.  Directed broadcasts require GetAdaptersAddresses
-    // which we skip here for simplicity — the unicast fallback covers it.
+    // Use GetAdaptersAddresses() to enumerate all IPv4 interfaces and
+    // compute directed broadcast addresses (unicast | ~mask).
+    ULONG buf_size = 15'000;
+    std::vector<uint8_t> buf(buf_size);
+    ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST
+                | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_INCLUDE_PREFIX;
+    ULONG ret = GetAdaptersAddresses(AF_INET, flags, nullptr,
+                    reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buf.data()),
+                    &buf_size);
+    if (ret == ERROR_BUFFER_OVERFLOW) {
+        buf.resize(buf_size);
+        ret = GetAdaptersAddresses(AF_INET, flags, nullptr,
+                    reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buf.data()),
+                    &buf_size);
+    }
+    if (ret == NO_ERROR) {
+        for (auto* adapter = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buf.data());
+             adapter != nullptr; adapter = adapter->Next)
+        {
+            if (adapter->OperStatus != IfOperStatusUp) continue;
+            // Skip loopback adapters
+            if (adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+
+            for (auto* ua = adapter->FirstUnicastAddress;
+                 ua != nullptr; ua = ua->Next)
+            {
+                if (ua->Address.lpSockaddr->sa_family != AF_INET) continue;
+
+                auto* sa = reinterpret_cast<sockaddr_in*>(
+                               ua->Address.lpSockaddr);
+                uint32_t ip   = ntohl(sa->sin_addr.s_addr);
+                uint32_t mask = 0;
+
+                // Build netmask from the prefix length
+                if (ua->OnLinkPrefixLength > 0 && ua->OnLinkPrefixLength <= 32) {
+                    mask = 0xFFFFFFFF << (32 - ua->OnLinkPrefixLength);
+                }
+                if (mask == 0) continue;  // no usable mask
+
+                uint32_t bcast = (ip | ~mask);
+                // Skip degenerate values
+                if (bcast == INADDR_BROADCAST || bcast == INADDR_ANY) continue;
+
+                in_addr bcast_addr{};
+                bcast_addr.s_addr = htonl(bcast);
+
+                // Avoid duplicates
+                bool dup = false;
+                for (const auto& a : addrs) {
+                    if (a.s_addr == bcast_addr.s_addr) { dup = true; break; }
+                }
+                if (!dup) addrs.push_back(bcast_addr);
+            }
+        }
+    }
 #else
     struct ifaddrs* ifa_list = nullptr;
     if (getifaddrs(&ifa_list) == 0) {

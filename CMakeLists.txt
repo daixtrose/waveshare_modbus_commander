@@ -58,9 +58,9 @@ target_link_libraries(waveshare_modbus_commander
         CLI11::CLI11
 )
 
-# network_scanner.cpp uses BSD sockets directly; link ws2_32 on Windows
+# network_scanner.cpp uses BSD sockets directly; link ws2_32 + iphlpapi on Windows
 if(WIN32)
-    target_link_libraries(waveshare_modbus_commander PRIVATE ws2_32)
+    target_link_libraries(waveshare_modbus_commander PRIVATE ws2_32 iphlpapi)
 endif()
 
 target_compile_features(waveshare_modbus_commander PRIVATE cxx_std_23)
