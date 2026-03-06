@@ -1,0 +1,398 @@
+// waveshare_commander.proto
+//
+// Bidirectional-streaming gRPC service for the Waveshare Modbus Commander.
+// Maps 1 : 1 to the CLI commands defined in cli_parser.hpp / cli_parser.cpp.
+//
+// Transport: HTTP/2 with mutual TLS 1.3 (server + client certificates).
+//
+// Usage pattern:
+//   1. Client opens the bidi stream  Session(stream ClientMessage)
+//      returns (stream ServerMessage).
+//   2. Client sends a Connect request to establish the Modbus TCP link
+//      (equivalent to  -i / -p / -t  CLI flags).
+//   3. Client sends command messages; each carries a  request_id  chosen
+//      by the client so that responses can be correlated (replies are
+//      asynchronous — the server may interleave responses from different
+//      requests).
+//   4. For long-running / streaming operations (ITERATE_RELAY_SWITCHES,
+//      SCAN_NETWORK, MONITOR_DIGITAL_INPUTS) the server sends multiple
+//      ServerMessages with the same request_id.  The client sends a
+//      CancelRequest to stop them.
+//   5. Either side can close the stream at any time.
+
+syntax = "proto3";
+
+package waveshare.v1;
+
+option java_multiple_files = true;
+option java_package        = "com.waveshare.commander.v1";
+option java_outer_classname = "WaveshareCommanderProto";
+
+// ═══════════════════════════════════════════════════════════════════
+// Service
+// ═══════════════════════════════════════════════════════════════════
+
+service WaveshareCommander {
+  // Single bidirectional stream that multiplexes all commands.
+  rpc Session(stream ClientMessage) returns (stream ServerMessage);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Envelope messages
+// ═══════════════════════════════════════════════════════════════════
+
+message ClientMessage {
+  // Caller-chosen correlation id (echoed in every ServerMessage that
+  // belongs to this request).  Must be unique per in-flight request.
+  string request_id = 1;
+
+  oneof command {
+    // ── Connection management ────────────────────────────────────
+    ConnectRequest            connect              = 10;
+    DisconnectRequest         disconnect            = 11;
+
+    // ── Coil operations  (Modbus FC 01 / FC 05 / FC 15) ────────
+    ReadCoilRequest           read_coil             = 20;
+    ReadCoilsRequest          read_coils            = 21;
+    WriteCoilRequest          write_coil            = 22;
+    WriteCoilsRequest         write_coils           = 23;
+
+    // ── Register operations  (Modbus FC 03 / FC 06 / FC 16) ────
+    ReadRegisterRequest       read_register         = 30;
+    ReadRegistersRequest      read_registers        = 31;
+    WriteRegisterRequest      write_register        = 32;
+    WriteRegistersRequest     write_registers       = 33;
+
+    // ── Digital inputs  (Modbus FC 02) ──────────────────────────
+    ReadDigitalInputsRequest  read_digital_inputs   = 40;
+
+    // ── Relay convenience ───────────────────────────────────────
+    IterateRelaySwitchesRequest iterate_relay_switches = 50;
+
+    // ── Network discovery  (VirCom UDP) ─────────────────────────
+    ScanNetworkRequest        scan_network          = 60;
+
+    // ── Device configuration  (VirCom UDP) ──────────────────────
+    SetStaticIpRequest        set_static_ip         = 70;
+    SetDhcpRequest            set_dhcp              = 71;
+    SetModbusTcpRequest       set_modbus_tcp        = 72;
+    SetModbusTcpPortRequest   set_modbus_tcp_port   = 73;
+    SetNameRequest            set_name              = 74;
+
+    // ── Flow control ────────────────────────────────────────────
+    CancelRequest             cancel                = 90;
+  }
+}
+
+message ServerMessage {
+  // Echoed from the ClientMessage that triggered this response.
+  string request_id = 1;
+
+  // True when this is the final message for the given request_id.
+  // For one-shot commands this is always true.
+  // For streaming commands (iterate, scan, monitor) it is true only
+  // on the last message (completion or cancellation acknowledgement).
+  bool final = 2;
+
+  oneof response {
+    // ── Connection management ────────────────────────────────────
+    ConnectResponse            connect              = 10;
+    DisconnectResponse         disconnect            = 11;
+
+    // ── Coil results ────────────────────────────────────────────
+    CoilState                  coil_state            = 20;
+    CoilStates                 coil_states           = 21;
+    WriteResult                write_result          = 22;
+
+    // ── Register results ────────────────────────────────────────
+    RegisterValue              register_value        = 30;
+    RegisterValues             register_values       = 31;
+
+    // ── Digital input results ───────────────────────────────────
+    DigitalInputsState         digital_inputs_state  = 40;
+
+    // ── Relay iterate events ────────────────────────────────────
+    RelayEvent                 relay_event           = 50;
+
+    // ── Network scan results ────────────────────────────────────
+    DeviceInfo                 device_info           = 60;
+    ScanComplete               scan_complete         = 61;
+
+    // ── Device configuration results ────────────────────────────
+    ConfigResult               config_result         = 70;
+    DeviceReappeared           device_reappeared     = 71;
+
+    // ── Flow control ────────────────────────────────────────────
+    CancelAck                  cancel_ack            = 90;
+
+    // ── Error (may arrive for any request_id) ───────────────────
+    ErrorResponse              error                 = 99;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Connection management     (maps to CLI:  -i  -p  -t)
+// ═══════════════════════════════════════════════════════════════════
+
+message ConnectRequest {
+  string ip_address      = 1;  // default "192.168.1.2"
+  uint32 port            = 2;  // default 502
+  uint32 timeout_seconds = 3;  // default 3
+  bool   debug           = 4;  // maps to --debug
+}
+
+message ConnectResponse {
+  bool ok = 1;
+}
+
+message DisconnectRequest {}
+message DisconnectResponse {}
+
+// ═══════════════════════════════════════════════════════════════════
+// Device targeting     (maps to CLI:  --mac  --name  -i)
+// Used by VirCom configuration commands that need to identify a
+// specific device on the network.
+// ═══════════════════════════════════════════════════════════════════
+
+message DeviceTarget {
+  // At most one should be set.  When none is set and a single device
+  // is found on the network, it is auto-selected (same as CLI).
+  string mac_address  = 1;  // e.g. "28:80:ca:ea:41:f3"
+  string device_name  = 2;  // e.g. "Hero 1"
+  string ip_address   = 3;  // e.g. "192.168.178.69"
+
+  // How long to wait for the device to reappear after a config change
+  // (maps to --wait-timeout, default 30000 ms).
+  uint32 wait_timeout_ms = 10;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Coil operations
+// ═══════════════════════════════════════════════════════════════════
+
+// --read-coil <address>
+message ReadCoilRequest {
+  uint32 address = 1;
+}
+
+// --read-coils <address> <count>
+message ReadCoilsRequest {
+  uint32 address = 1;
+  uint32 count   = 2;
+}
+
+// --write-coil <address> <state>
+message WriteCoilRequest {
+  uint32 address = 1;
+  bool   state   = 2;
+}
+
+// --write-coils <addr1 state1 addr2 state2 ...>
+message WriteCoilsRequest {
+  repeated CoilAssignment assignments = 1;
+}
+
+message CoilAssignment {
+  uint32 address = 1;
+  bool   state   = 2;
+}
+
+// ── Coil responses ──────────────────────────────────────────────
+
+message CoilState {
+  uint32 address = 1;
+  bool   state   = 2;
+}
+
+message CoilStates {
+  uint32         start_address = 1;
+  repeated bool  states        = 2;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Register operations
+// ═══════════════════════════════════════════════════════════════════
+
+// --read-register <address>
+message ReadRegisterRequest {
+  uint32 address = 1;
+}
+
+// --read-registers <address> <count>
+message ReadRegistersRequest {
+  uint32 address = 1;
+  uint32 count   = 2;
+}
+
+// --write-register <address> <value>
+message WriteRegisterRequest {
+  uint32 address = 1;
+  uint32 value   = 2;  // uint16 on the wire, uint32 in proto3
+}
+
+// --write-registers <address> <value1 value2 ...>
+message WriteRegistersRequest {
+  uint32          address = 1;
+  repeated uint32 values  = 2;
+}
+
+// ── Register responses ──────────────────────────────────────────
+
+message RegisterValue {
+  uint32 address = 1;
+  uint32 value   = 2;
+}
+
+message RegisterValues {
+  uint32          start_address = 1;
+  repeated uint32 values        = 2;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Digital inputs     (Modbus FC 02)
+// ═══════════════════════════════════════════════════════════════════
+
+// --read-digital-inputs  (no arguments, reads DI1-DI8)
+message ReadDigitalInputsRequest {}
+
+message DigitalInputsState {
+  // Index 0 = DI1, index 7 = DI8.
+  repeated bool states = 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Relay convenience     (streaming, cancellable)
+// ═══════════════════════════════════════════════════════════════════
+
+// --iterate-relais-switches
+// Server streams RelayEvent messages until the client sends
+// CancelRequest with the matching request_id.
+message IterateRelaySwitchesRequest {}
+
+message RelayEvent {
+  enum EventType {
+    ALL_OFF        = 0;
+    COIL_ON        = 1;
+    COIL_OFF       = 2;
+    CYCLE_COMPLETE = 3;
+    SAFE_SHUTDOWN  = 4;
+  }
+  EventType type    = 1;
+  uint32    coil_nr = 2;  // 1-8, meaningful for COIL_ON / COIL_OFF
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Network discovery     (VirCom UDP, streaming, cancellable)
+// ═══════════════════════════════════════════════════════════════════
+
+// --scan-network [--scan-timeout T] [-i specific_ip]
+message ScanNetworkRequest {
+  uint32 scan_timeout_ms = 1;  // default 3000
+  string probe_ip        = 2;  // optional: probe a single IP
+}
+
+message DeviceInfo {
+  string ip_address   = 1;
+  string mac_address  = 2;
+  string device_name  = 3;
+  uint32 port         = 4;
+  string subnet_mask  = 5;
+  string gateway      = 6;
+  string ip_mode      = 7;  // "DHCP" | "Static"
+  string module_id    = 8;
+}
+
+message ScanComplete {
+  uint32 devices_found = 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Device configuration     (VirCom UDP)
+// Each config command may produce:
+//   1. ConfigResult   (command accepted / sent to device)
+//   2. DeviceReappeared  (device rebooted and came back)
+// ═══════════════════════════════════════════════════════════════════
+
+// --set-ip <ip> <mask> <gateway> <dns>
+message SetStaticIpRequest {
+  DeviceTarget target      = 1;
+  string       ip_address  = 2;
+  string       subnet_mask = 3;
+  string       gateway     = 4;
+  string       dns         = 5;
+}
+
+// --set-dhcp
+message SetDhcpRequest {
+  DeviceTarget target = 1;
+}
+
+// --set-modbus-tcp [--modbus-tcp-port P]
+message SetModbusTcpRequest {
+  DeviceTarget target = 1;
+  uint32       port   = 2;  // default 502
+}
+
+// --set-modbus-tcp-port <port>
+message SetModbusTcpPortRequest {
+  DeviceTarget target = 1;
+  uint32       port   = 2;
+}
+
+// --set-name <name>
+message SetNameRequest {
+  DeviceTarget target = 1;
+  string       name   = 2;  // max 9 ASCII characters
+}
+
+// ── Config responses ────────────────────────────────────────────
+
+message ConfigResult {
+  string description = 1;  // human-readable summary of what was sent
+}
+
+message DeviceReappeared {
+  DeviceInfo device = 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Write result     (shared by coil and register write commands)
+// ═══════════════════════════════════════════════════════════════════
+
+message WriteResult {
+  bool   success     = 1;
+  string description = 2;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Flow control
+// ═══════════════════════════════════════════════════════════════════
+
+// Cancel an in-flight streaming command.
+message CancelRequest {
+  // The request_id of the command to cancel.
+  string target_request_id = 1;
+}
+
+message CancelAck {
+  string cancelled_request_id = 1;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Error
+// ═══════════════════════════════════════════════════════════════════
+
+message ErrorResponse {
+  enum ErrorCode {
+    UNKNOWN            = 0;
+    NOT_CONNECTED      = 1;
+    CONNECTION_FAILED  = 2;
+    MODBUS_ERROR       = 3;
+    INVALID_ARGUMENT   = 4;
+    DEVICE_NOT_FOUND   = 5;
+    TIMEOUT            = 6;
+    NAME_TOO_LONG      = 7;
+  }
+  ErrorCode code    = 1;
+  string    message = 2;
+}
