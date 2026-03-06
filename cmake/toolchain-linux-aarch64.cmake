@@ -8,6 +8,12 @@ set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc-14)
 set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++-14)
 set(CMAKE_STRIP aarch64-linux-gnu-strip)
 
+# Auto-detect Bookworm sysroot (present in cross-build-bookworm-arm64 container)
+if(NOT DEFINED CMAKE_SYSROOT AND EXISTS "/opt/bookworm-arm64-sysroot")
+    set(CMAKE_SYSROOT /opt/bookworm-arm64-sysroot)
+    message(STATUS "Using Bookworm aarch64 sysroot: ${CMAKE_SYSROOT}")
+endif()
+
 # Search paths: find libraries/headers for target only, programs on host
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
