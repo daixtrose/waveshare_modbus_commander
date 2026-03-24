@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25...4.2)
 
 project(waveshare_modbus_commander
-    VERSION 0.8.3
+    VERSION 0.9.0
     DESCRIPTION "CLI commander for generic Modbus TCP devices"
     LANGUAGES CXX
 )
@@ -20,7 +20,7 @@ if(NOT TARGET waveshare)
     FetchContent_Declare(
         libwaveshare_proj
         GIT_REPOSITORY https://github.com/daixtrose/libwaveshare.git
-        GIT_TAG main
+        GIT_TAG v0.2.0
         GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(libwaveshare_proj)
