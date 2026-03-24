@@ -412,7 +412,8 @@ int send_search(socket_t sock, const std::array<uint8_t, VIRCOM_PACKET_SIZE>& re
 } // anonymous namespace
 
 std::vector<DiscoveredDevice> scan_network(int timeout_ms, bool debug,
-                                           const std::string& target_ip)
+                                           const std::string& target_ip,
+                                           const std::vector<std::string>& extra_subnets)
 {
     std::vector<DiscoveredDevice> devices;
 
@@ -520,7 +521,36 @@ std::vector<DiscoveredDevice> scan_network(int timeout_ms, bool debug,
         }
     }
 
-    // 4. WSL2 auto-discovery: resolve the Windows host's physical LAN IPs
+    // 4. Explicit extra subnets (--extra-subnet): always sweep these with
+    //    unicast probes regardless of platform.
+    {
+        std::vector<uint32_t> extra_nets;
+        for (const auto& cidr : extra_subnets) {
+            in_addr addr{};
+            if (inet_pton(AF_INET, cidr.c_str(), &addr) == 1) {
+                extra_nets.push_back(ntohl(addr.s_addr) & 0xFFFFFF00u);
+            } else if (debug) {
+                portable::println("Invalid extra subnet: {}", cidr);
+            }
+        }
+        for (uint32_t subnet : extra_nets) {
+            for (int host = 1; host <= 254; ++host) {
+                uint32_t ip_host = subnet | static_cast<uint32_t>(host);
+                sockaddr_in dest{};
+                dest.sin_family = AF_INET;
+                dest.sin_port = htons(VIRCOM_PORT);
+                dest.sin_addr.s_addr = htonl(ip_host);
+                send_search(sock, request, dest);
+            }
+            if (debug) {
+                portable::println("Sent 254 unicast probes to {}.{}.{}.1-254:{} (extra subnet)",
+                                  (subnet >> 24) & 0xFF, (subnet >> 16) & 0xFF,
+                                  (subnet >> 8) & 0xFF, VIRCOM_PORT);
+            }
+        }
+    }
+
+    // 5. WSL2 auto-discovery: resolve the Windows host's physical LAN IPs
     //    via hostname + DNS search domain, then unicast-sweep each /24 subnet.
     //    This is needed because WSL2's NAT prevents UDP broadcasts from
     //    reaching the physical LAN.  Unicast packets are NATed through.

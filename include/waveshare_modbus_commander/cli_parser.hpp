@@ -79,6 +79,7 @@ struct CommandLineOptions {
     int scan_timeout_ms = 3000;
     int wait_timeout_ms = 30000;
     bool ip_explicitly_set = false;
+    std::vector<std::string> extra_subnets; ///< --extra-subnet: additional /24s to sweep
 
     std::string target_mac;       ///< --mac: target device MAC address
     std::string target_name;      ///< --name: target device name

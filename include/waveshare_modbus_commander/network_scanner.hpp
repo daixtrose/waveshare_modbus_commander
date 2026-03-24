@@ -41,13 +41,17 @@ struct DiscoveredDevice {
 ///   2. Per-interface directed broadcasts (e.g. 192.168.178.255)
 ///   3. Unicast to @p target_ip, if non-empty (useful from NATed environments
 ///      such as WSL2 where broadcasts don't reach the physical LAN)
+///   4. Unicast sweep of all /24 subnets in @p extra_subnets
+///   5. (WSL2 only) auto-discovered Windows-host subnets via DNS
 ///
-/// @param timeout_ms  How long to wait for responses (milliseconds).
-/// @param debug       Print diagnostic information if true.
-/// @param target_ip   Optional specific IP to probe via unicast.
+/// @param timeout_ms     How long to wait for responses (milliseconds).
+/// @param debug          Print diagnostic information if true.
+/// @param target_ip      Optional specific IP to probe via unicast.
+/// @param extra_subnets  Additional /24 subnets to sweep (e.g. {"192.168.1.0"}).
 /// @return Vector of discovered devices (may be empty).
 std::vector<DiscoveredDevice> scan_network(int timeout_ms, bool debug,
-                                           const std::string& target_ip = {});
+                                           const std::string& target_ip = {},
+                                           const std::vector<std::string>& extra_subnets = {});
 
 /// Format a list of discovered devices as a human-readable table.
 std::string format_device_table(const std::vector<DiscoveredDevice>& devices);

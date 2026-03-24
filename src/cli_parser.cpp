@@ -114,6 +114,11 @@ namespace waveshare
                        "Timeout in milliseconds for network scan (default: 3000)")
             ->default_val(3000);
 
+        app.add_option("--extra-subnet", options.extra_subnets,
+                       "Additional /24 subnet(s) to sweep with unicast probes\n"
+                       "(e.g. --extra-subnet 192.168.1.0 --extra-subnet 10.0.0.0)")
+            ->expected(0, -1);
+
         app.add_option("--mac", options.target_mac,
                        "Target device MAC address (e.g. 28:80:ca:ea:41:f3)");
 
@@ -312,6 +317,13 @@ namespace waveshare
             for (const auto &action : options.actions)
             {
                 output += std::format("  - {}\n", action_to_string(action));
+            }
+        }
+
+        if (!options.extra_subnets.empty()) {
+            output += "extra_subnets:\n";
+            for (const auto& s : options.extra_subnets) {
+                output += std::format("  - {}\n", s);
             }
         }
 

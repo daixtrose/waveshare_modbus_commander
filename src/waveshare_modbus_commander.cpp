@@ -115,7 +115,8 @@ int main(int argc, char *argv[])
             (!options.target_mac.empty() || !options.target_name.empty()))
         {
             auto devices = waveshare::scan_network(options.scan_timeout_ms,
-                                                   options.debug, "");
+                                                   options.debug, "",
+                                                   options.extra_subnets);
             std::string error;
             auto* dev = waveshare::resolve_target_device(
                 devices, options.target_mac, options.target_name, "", error);
@@ -161,7 +162,8 @@ int main(int argc, char *argv[])
             if (options.ip_explicitly_set) target = options.ip_address;
 
             devices = waveshare::scan_network(options.scan_timeout_ms,
-                                              options.debug, target);
+                                              options.debug, target,
+                                              options.extra_subnets);
 
             std::string mac  = !resolved_mac.empty() ? resolved_mac : options.target_mac;
             std::string name = !resolved_mac.empty() ? ""           : options.target_name;
@@ -441,7 +443,8 @@ int main(int argc, char *argv[])
                 }
                 auto devices = waveshare::scan_network(options.scan_timeout_ms,
                                                        options.debug,
-                                                       target);
+                                                       target,
+                                                       options.extra_subnets);
                 portable::println("{}", waveshare::format_device_table(devices));
                 break;
             }
