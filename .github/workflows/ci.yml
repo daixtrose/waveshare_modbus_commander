@@ -97,6 +97,7 @@ jobs:
           aarch64-linux-gnu-readelf -d /tmp/deb-extract-aarch64/opt/daixtrose/*/bin/* | grep -i -E 'runpath|rpath'
 
       - name: Verify Bookworm compatibility
+        shell: bash
         run: |
           set -euo pipefail
           dpkg -x build/linux-aarch64-release/*.deb /tmp/bookworm-compat-check

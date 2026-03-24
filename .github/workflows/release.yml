@@ -86,6 +86,7 @@ jobs:
           find build/linux-aarch64-release -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} artifacts/ \;
 
       - name: Verify Bookworm compatibility
+        shell: bash
         run: |
           set -euo pipefail
           dpkg -x build/linux-aarch64-release/*.deb /tmp/bookworm-compat-check
