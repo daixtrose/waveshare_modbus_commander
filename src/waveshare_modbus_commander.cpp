@@ -1,8 +1,8 @@
 #include "libmodbus_cpp/modbus_connection.hpp"
+#include "libwaveshare/create_modbus_connection.hpp"
+#include "libwaveshare/network_scanner.hpp"
+#include "libwaveshare/portable_print.hpp"
 #include "waveshare_modbus_commander/cli_parser.hpp"
-#include "waveshare_modbus_commander/create_modbus_connection.hpp"
-#include "waveshare_modbus_commander/network_scanner.hpp"
-#include "waveshare_modbus_commander/portable_print.hpp"
 
 #include <atomic>
 #include <chrono>

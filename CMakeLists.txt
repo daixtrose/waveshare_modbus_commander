@@ -15,15 +15,15 @@ include(FetchContent)
 
 option(WAVESHARE_ENABLE_CPACK "Enable CPack packaging support" ${PROJECT_IS_TOP_LEVEL})
 
-if(NOT TARGET modbus_cpp)
-    set(LIBMODBUS_CPP_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+if(NOT TARGET waveshare)
+    set(LIBWAVESHARE_ENABLE_CPACK OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(
-        libmodbus_cpp_proj
-        GIT_REPOSITORY https://github.com/daixtrose/libmodbus-cpp.git
-        GIT_TAG v1.7.1
+        libwaveshare_proj
+        GIT_REPOSITORY https://github.com/daixtrose/libwaveshare.git
+        GIT_TAG main
         GIT_SHALLOW TRUE
     )
-    FetchContent_MakeAvailable(libmodbus_cpp_proj)
+    FetchContent_MakeAvailable(libwaveshare_proj)
 endif()
 
 if(NOT TARGET CLI11::CLI11)
@@ -39,8 +39,6 @@ endif()
 add_executable(waveshare_modbus_commander
     ${CMAKE_CURRENT_LIST_DIR}/src/waveshare_modbus_commander.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/cli_parser.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/create_modbus_connection.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/src/network_scanner.cpp
 )
 
 set_target_properties(waveshare_modbus_commander PROPERTIES
@@ -54,14 +52,9 @@ target_include_directories(waveshare_modbus_commander
 
 target_link_libraries(waveshare_modbus_commander
     PRIVATE
-        modbus_cpp
+        waveshare
         CLI11::CLI11
 )
-
-# network_scanner.cpp uses BSD sockets directly; link ws2_32 + iphlpapi on Windows
-if(WIN32)
-    target_link_libraries(waveshare_modbus_commander PRIVATE ws2_32 iphlpapi)
-endif()
 
 target_compile_definitions(waveshare_modbus_commander PRIVATE
     PROJECT_VERSION="${PROJECT_VERSION}"
