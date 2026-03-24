@@ -11,8 +11,6 @@
       "hidden": true,
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "gcc-14",
-        "CMAKE_CXX_COMPILER": "g++-14",
         "CMAKE_CXX_STANDARD": "23",
         "CMAKE_CXX_STANDARD_REQUIRED": "ON",
         "CMAKE_CXX_EXTENSIONS": "OFF",
@@ -20,9 +18,18 @@
       }
     },
     {
+      "name": "linux-base",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc-14",
+        "CMAKE_CXX_COMPILER": "g++-14"
+      }
+    },
+    {
       "name": "linux-x86_64-release",
       "displayName": "Linux x86_64 Release",
-      "inherits": "base",
+      "inherits": "linux-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       },
@@ -35,7 +42,7 @@
     {
       "name": "linux-x86_64-debug",
       "displayName": "Linux x86_64 Debug",
-      "inherits": "base",
+      "inherits": "linux-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       },
@@ -48,7 +55,7 @@
     {
       "name": "linux-aarch64-release",
       "displayName": "Linux aarch64 Release (cross-compile for RPi 5 / RevPi Connect 5)",
-      "inherits": "base",
+      "inherits": "linux-base",
       "toolchainFile": "${sourceDir}/cmake/toolchain-linux-aarch64.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"

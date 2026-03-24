@@ -20,7 +20,7 @@ if(NOT TARGET waveshare)
     FetchContent_Declare(
         libwaveshare_proj
         GIT_REPOSITORY https://github.com/daixtrose/libwaveshare.git
-        GIT_TAG v0.2.0
+        GIT_TAG v0.2.1
         GIT_SHALLOW TRUE
     )
     FetchContent_MakeAvailable(libwaveshare_proj)
